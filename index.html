@@ -312,6 +312,50 @@ function getDisplayString(value) {
   try { return JSON.stringify(value); } catch { return String(value); }
 }
 
+// Try to resolve a plausible date from the row and any expanded linked rows
+function resolveAnyDate(row) {
+  if (!row || typeof row !== 'object') return null;
+  const primary = getField(row, [
+    'Schedule Service Date','Schedule Service Datem','Schedule_Service_Date','Service Date','service date','service_date',
+    'Work_Date','work date','upcoming_date','upcoming date','date','scheduled_date','scheduled date','booking_date','booking date'
+  ]);
+  if (primary) return primary;
+
+  const ex = row._expand || row._EXPAND || {};
+  const expandTargets = Object.values(ex);
+  for (const target of expandTargets) {
+    const first = Array.isArray(target) ? target[0] : target;
+    if (first && typeof first === 'object') {
+      const d = getField(first, [
+        'Schedule Service Date','Schedule Service Datem','Schedule_Service_Date','Service Date','service date','service_date',
+        'Work_Date','work date','upcoming_date','upcoming date','date','scheduled_date','scheduled date','booking_date','booking date'
+      ]);
+      if (d) return d;
+    }
+  }
+  // Fallback: scan keys with "date" substring
+  const tryObject = (o) => {
+    for (const k in o) {
+      if (!Object.prototype.hasOwnProperty.call(o,k)) continue;
+      const v = o[k];
+      if (/(^|_|\s)date(s)?($|_|\s)/i.test(k) || /date$/i.test(k)) {
+        if (v != null && v !== '') return v;
+      }
+    }
+    return null;
+  };
+  const fallback = tryObject(row);
+  if (fallback) return fallback;
+  for (const target of expandTargets) {
+    const first = Array.isArray(target) ? target[0] : target;
+    if (first && typeof first === 'object') {
+      const fv = tryObject(first);
+      if (fv) return fv;
+    }
+  }
+  return null;
+}
+
 function parseFlexibleDate(input) {
   if (!input) return null;
   if (input instanceof Date) return isNaN(input.getTime()) ? null : input;
@@ -383,19 +427,19 @@ async function loadFromNocoDB() {
   try {
     const withLimit = nocodbEndpoint.includes('limit=') ? nocodbEndpoint : (nocodbEndpoint + (nocodbEndpoint.includes('?') ? '&' : '?') + 'limit=100');
 
-    // Ensure both Property ID and Followup links are expanded
+    // Ensure Property ID, Followup, and Lawn Schedule links are expanded
     let urlObj; try { urlObj = new URL(withLimit); } catch { urlObj = null; }
     let url;
     if (urlObj) {
       const existing = urlObj.searchParams.get('expand');
-      const needed = ['Property ID', 'Followup'];
+      const needed = ['Property ID', 'Followup', 'Lawn Schedule'];
       const parts = new Set((existing ? existing.split(',') : []).map(s => s.trim()).filter(Boolean));
       needed.forEach(n => parts.add(n));
       urlObj.searchParams.set('expand', Array.from(parts).join(','));
       url = urlObj.toString();
     } else {
       const sep = withLimit.includes('?') ? '&' : '?';
-      url = `${withLimit}${sep}expand=${encodeURIComponent('Property ID,Followup')}`;
+      url = `${withLimit}${sep}expand=${encodeURIComponent('Property ID,Followup,Lawn Schedule')}`;
     }
 
     const response = await fetch(url, {
@@ -437,16 +481,13 @@ async function loadFromNocoDB() {
       const propertyDisplayRaw = resolvePropertyDisplay(row) || resolvePropertyName(row) || propertyId;
       const propertyDisplay = getDisplayString(propertyDisplayRaw);
 
-      const serviceDateRaw = getField(row, [
-        'Schedule Service Date','Schedule Service Datem','Schedule_Service_Date','Service Date','service date','service_date',
-        'Work_Date','work date','upcoming_date','upcoming date','date','scheduled_date','scheduled date','booking_date','booking date'
-      ]);
+      let serviceDateRaw = resolveAnyDate(row);
       const serviceType = getField(row, ['Service Type','service type','Service_Type','service_type','Service','service','service_name','servicename']);
 
       const summaryParts = [
         `ID: ${scheduleId}`,
         propertyDisplay ? `Prop: ${propertyDisplay}` : null,
-        serviceDateRaw ? `Date: ${formatDate(serviceDateRaw)}` : null,
+        serviceDateRaw ? `Date: ${formatDate(serviceDateRaw)}` : `Date: N/A`,
         serviceType ? `Type: ${serviceType}` : null
       ].filter(Boolean);
       const summary = summaryParts.join(' | ');
@@ -525,10 +566,7 @@ function applyScheduleSelection(scheduleId) {
   if (propertyDisplayRaw == null && selectedOpt) propertyDisplayRaw = selectedOpt.dataset.propertyDisplay;
   const propertyDisplay = getDisplayString(propertyDisplayRaw);
 
-  const serviceDateRaw = getField(row, [
-    'Schedule Service Date','Schedule Service Datem','Schedule_Service_Date','Service Date','service date','service_date',
-    'Work_Date','work date','upcoming_date','upcoming date','date','scheduled_date','scheduled date','booking_date','booking date'
-  ]);
+  let serviceDateRaw = resolveAnyDate(row);
   const effectiveRawDate = serviceDateRaw || (selectedOpt && selectedOpt.dataset.rawDate) || '';
 
   const serviceType = getField(row, ['Service Type','service type','Service_Type','service_type','Service','service','service_name','servicename']);
@@ -537,6 +575,9 @@ function applyScheduleSelection(scheduleId) {
   propertyIdEl.value = propertyId != null ? String(propertyId) : '';
   document.getElementById('propertyDisplay').value = propertyDisplay || '';
   serviceDateEl.value = effectiveRawDate ? toDateInputValue(effectiveRawDate) : '';
+  // Also reflect date into the visible bookingDate input
+  const bookingDateEl = document.getElementById('bookingDate');
+  if (bookingDateEl && effectiveRawDate) bookingDateEl.value = toDateInputValue(effectiveRawDate);
   serviceTypeEl.value = serviceType != null ? String(serviceType) : '';
   assignedContractorEl.value = assigned != null ? String(assigned) : '';
   if (lawnScheduleIdDisplayEl) lawnScheduleIdDisplayEl.value = String(scheduleId || '');
