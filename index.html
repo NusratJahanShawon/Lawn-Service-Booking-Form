@@ -416,6 +416,7 @@ async function loadFromNocoDB() {
 
     filteredRows.forEach(row => {
       const scheduleId = getField(row, ['Schedule ID','Schedule_ID','schedule_id','ScheduleId','scheduleid','id']);
+      const internalRowId = row.Id != null ? row.Id : (row.id != null ? row.id : '');
       if (scheduleId == null) return;
 
       scheduleRowsById.set(String(scheduleId), row);
@@ -443,6 +444,7 @@ async function loadFromNocoDB() {
       opt.textContent = summary;
       opt.dataset.rawDate = serviceDateRaw ? String(serviceDateRaw) : '';
       opt.dataset.propertyDisplay = propertyDisplay || '';
+      opt.dataset.rowId = internalRowId !== undefined && internalRowId !== null ? String(internalRowId) : '';
       scheduleSelect.appendChild(opt);
     });
 
@@ -608,12 +610,21 @@ document.getElementById('bookingForm').addEventListener('submit', async function
       bookingData.status = selectedStatus;
     }
 
-    // Map selected schedule ID to the linked field "lawn schedule" and add "LAwn Schedule ID"
+    // Map selected schedule to link field and track display ID separately
     const scheduleSelectEl = document.getElementById('scheduleId');
     const chosenScheduleId = scheduleSelectEl ? scheduleSelectEl.value : (bookingData.scheduleId || '');
+    const chosenOpt = scheduleSelectEl && scheduleSelectEl.selectedIndex >= 0 ? scheduleSelectEl.options[scheduleSelectEl.selectedIndex] : null;
+    const internalRowId = chosenOpt ? (chosenOpt.dataset.rowId || '') : '';
     if (chosenScheduleId) {
-      bookingData['lawn schedule'] = [chosenScheduleId];
+      // Human-facing schedule identifier
       bookingData['Lawn Schedule ID'] = chosenScheduleId;
+      // Linked row should be NocoDB internal row id
+      if (internalRowId) {
+        bookingData['lawn schedule'] = [internalRowId];
+      } else {
+        // Fallback to provided value if internal id is not present
+        bookingData['lawn schedule'] = [chosenScheduleId];
+      }
     }
 
     console.log('Submitting data:', bookingData); // Debug log
