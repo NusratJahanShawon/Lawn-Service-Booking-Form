@@ -179,7 +179,7 @@
 const CONFIG = {
   // POINT THIS DIRECTLY TO YOUR n8n PUBLIC WEBHOOK URL (POST)
   // Example: 'https://your-n8n.domain/webhook/abcd-efgh-1234'
-  submitEndpoint: 'https://primary-production-f6af0.up.railway.app/webhook-test/formsub',
+  submitEndpoint: 'https://primary-production-f6af0.up.railway.app/webhook/formsub',
   // If you really need to post to your Railway proxy, make sure that proxy adds CORS headers.
   // submitEndpoint: 'https://primary-production-f6af0.up.railway.app/webhook/formsub',
 
@@ -194,6 +194,11 @@ const CONFIG = {
   // If false: send application/json (requires proper CORS on server)
   USE_URLENCODED: true
 };
+// Optional: direct lookup of Lawn Schedule table by human Schedule ID
+// Set to your Lawn Schedule table records endpoint to enable client-side ID resolution
+// Example: 'https://your-nocodb/api/v2/tables/<lawn_table_id>/records'
+CONFIG.lawnScheduleLookupEndpoint = CONFIG.lawnScheduleLookupEndpoint || '';
+
 
 /* ===================== Boot ===================== */
 document.addEventListener('DOMContentLoaded', function () {
@@ -472,7 +477,14 @@ async function loadFromNocoDB() {
     filteredRows.forEach(row => {
       // Human-visible schedule identifier (NOT the internal row id)
       const scheduleId = getField(row, ['Schedule ID','Schedule_ID','schedule_id','ScheduleId','scheduleid']);
-      const internalRowId = row.Id != null ? row.Id : (row.id != null ? row.id : '');
+      // Prefer internal id from the expanded link if present (1–1 link)
+      let internalRowId = row.Id != null ? row.Id : (row.id != null ? row.id : '');
+      const ex = row._expand || row._EXPAND || {};
+      const ls = ex['Lawn Schedule'] || ex['Lawn_Schedule'] || ex['lawn schedule'] || ex['lawn_schedule'];
+      const lsFirst = Array.isArray(ls) ? ls[0] : ls;
+      if (lsFirst && (lsFirst.Id != null || lsFirst.id != null)) {
+        internalRowId = lsFirst.Id != null ? lsFirst.Id : lsFirst.id;
+      }
       if (scheduleId == null) return;
 
       scheduleRowsById.set(String(scheduleId), row);
@@ -691,12 +703,34 @@ document.getElementById('bookingForm').addEventListener('submit', async function
     if (chosenScheduleId) {
       // Human-facing schedule identifier
       bookingData['Lawn Schedule ID'] = chosenScheduleId;
-      // Linked row should be NocoDB internal row id
+      // Linked row should be NocoDB internal row id; attempt to resolve if missing
       if (internalRowId) {
         bookingData['lawn schedule'] = internalRowId;
       } else {
-        // Fallback to provided value if internal id is not present
-        bookingData['lawn schedule'] = chosenScheduleId;
+        const lookupEndpoint = CONFIG.lawnScheduleLookupEndpoint || '';
+        if (lookupEndpoint) {
+          try {
+            const url = new URL(lookupEndpoint);
+            // Query by human Schedule ID using where param
+            const where = encodeURIComponent(JSON.stringify({ 'Schedule ID': { eq: chosenScheduleId } }));
+            url.searchParams.set('where', where);
+            url.searchParams.set('limit', '1');
+            const resp = await fetch(url.toString(), {
+              headers: { 'accept': 'application/json', 'xc-token': CONFIG.nocodbToken }
+            });
+            if (resp.ok) {
+              const out = await resp.json();
+              const list = Array.isArray(out) ? out : (out.list || []);
+              const first = list[0];
+              const id = first && (first.Id != null ? first.Id : first.id);
+              if (id) bookingData['lawn schedule'] = String(id);
+            }
+          } catch (e) {
+            console.warn('Lookup for Lawn Schedule row id failed', e);
+          }
+        }
+        // If still not resolved, fallback to chosenScheduleId (server-side can map if configured)
+        if (!bookingData['lawn schedule']) bookingData['lawn schedule'] = chosenScheduleId;
       }
     }
 
