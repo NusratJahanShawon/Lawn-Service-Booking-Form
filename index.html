@@ -90,6 +90,11 @@
       </select>
     </div>
 
+    <div class="form-group">
+      <label for="lawnScheduleIdDisplay">Lawn Schedule ID</label>
+      <input type="text" id="lawnScheduleIdDisplay" class="form-control" readonly />
+    </div>
+
     <!-- Hidden but programmatically filled -->
     <div class="form-group" style="display:none;">
       <input type="hidden" id="propertyId" name="propertyId" />
@@ -490,12 +495,14 @@ function applyScheduleSelection(scheduleId) {
   const assignedContractorEl = document.getElementById('assignedContractor');
   const scheduleSelect = document.getElementById('scheduleId');
   const selectedOpt = scheduleSelect ? scheduleSelect.options[scheduleSelect.selectedIndex] : null;
+  const lawnScheduleIdDisplayEl = document.getElementById('lawnScheduleIdDisplay');
 
   if (!row) {
     propertyIdEl.value = '';
     serviceDateEl.value = '';
     serviceTypeEl.value = '';
     assignedContractorEl.value = '';
+    if (lawnScheduleIdDisplayEl) lawnScheduleIdDisplayEl.value = '';
     return;
   }
 
@@ -518,6 +525,7 @@ function applyScheduleSelection(scheduleId) {
   serviceDateEl.value = effectiveRawDate ? toDateInputValue(effectiveRawDate) : '';
   serviceTypeEl.value = serviceType != null ? String(serviceType) : '';
   assignedContractorEl.value = assigned != null ? String(assigned) : '';
+  if (lawnScheduleIdDisplayEl) lawnScheduleIdDisplayEl.value = String(scheduleId || '');
 
   // Sync visible selects
   syncSelectValue(document.getElementById('property'), propertyDisplay || propertyId);
@@ -685,6 +693,10 @@ document.getElementById('bookingForm').addEventListener('submit', async function
       // Ensure date input is blank
       const bookingDateEl = document.getElementById('bookingDate');
       if (bookingDateEl && bookingDateEl.type === 'date') bookingDateEl.value = '';
+
+      // Clear schedule ID display
+      const lawnScheduleIdDisplayEl = document.getElementById('lawnScheduleIdDisplay');
+      if (lawnScheduleIdDisplayEl) lawnScheduleIdDisplayEl.value = '';
     } catch {}
   } catch (error) {
     console.error('Error submitting form:', error);
