@@ -96,25 +96,21 @@
       <label for="propertyDisplay">Property</label>
       <input type="text" id="propertyDisplay" class="form-control" readonly />
     </div>
-
     <div class="form-group" style="display:none;">
       <label for="serviceDate">Schedule Service Date</label>
       <input type="date" id="serviceDate" name="serviceDate" class="form-control" readonly />
     </div>
-
     <div class="form-group" style="display:none;">
       <label for="serviceType">Service Type</label>
       <input type="text" id="serviceType" name="serviceType" class="form-control" readonly />
     </div>
-
     <div class="form-group" style="display:none;">
       <label for="assignedContractor">Assigned Contractor</label>
       <input type="text" id="assignedContractor" name="assignedContractor" class="form-control" readonly />
     </div>
-
     <div class="form-group" style="display:none;">
-      <label for="status">Status (source)</label>
-      <input type="text" id="status" name="status" class="form-control" readonly />
+    <label for="statusSource">Status (source)</label>
+    <input type="text" id="statusSource" class="form-control" readonly />
     </div>
 
     <!-- Visible user selections -->
@@ -138,12 +134,11 @@
     </div>
 
     <div class="form-group">
-      <label for="statusSelect">Status</label>
-      <select id="statusSelect" name="statusSelect" class="form-control">
+      <label for="status">Status *</label>
+      <select id="status" name="status" class="form-control" required>
         <option value="">Choose status...</option>
-        <option value="Pending">Pending</option>
-        <option value="Confirmed">Confirmed</option>
-        <option value="Completed">Completed</option>
+        <option value="Pending">Schedule</option>
+        <option value="Confirmed">On process</option>
         <option value="Cancelled">Cancelled</option>
       </select>
     </div>
@@ -178,7 +173,7 @@
 const CONFIG = {
   // POINT THIS DIRECTLY TO YOUR n8n PUBLIC WEBHOOK URL (POST)
   // Example: 'https://your-n8n.domain/webhook/abcd-efgh-1234'
-  submitEndpoint: 'https://primary-production-f6af0.up.railway.app/webhook-test/formsub',
+  submitEndpoint: 'https://primary-production-f6af0.up.railway.app/webhook/formsub',
   // If you really need to post to your Railway proxy, make sure that proxy adds CORS headers.
   // submitEndpoint: 'https://primary-production-f6af0.up.railway.app/webhook/formsub',
 
@@ -598,10 +593,25 @@ document.getElementById('bookingForm').addEventListener('submit', async function
   try {
     const formData = new FormData(this);
     const bookingData = {};
-    for (const [k, v] of formData.entries()) bookingData[k] = v;
+    for (const [k, v] of formData.entries()) {
+      // Ensure status is captured correctly
+      if (k === 'status') {
+        bookingData.Status = v; // Capitalize Status to match NocoDB column name
+      } else {
+        bookingData[k] = v;
+      }
+    }
 
-    // add extra meta
+    // Make sure status is set even if not in form
+    if (!bookingData.Status) {
+      const statusSelect = document.getElementById('status');
+      bookingData.Status = statusSelect.value;
+    }
+
+    // Add timestamp
     bookingData.submittedAt = new Date().toISOString();
+
+    console.log('Submitting data:', bookingData); // Debug log
 
     let fetchOptions;
 
