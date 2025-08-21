@@ -81,7 +81,7 @@
     </div>
     <div class="form-group">
       <label for="contractorPhone">Contractor Phone</label>
-      <input type="tel" id="contractorPhone" name="contractorPhone" class="form-control" inputmode="numeric" pattern="\\d{7,15}" placeholder="Digits only" />
+      <input type="tel" id="contractorPhone" name="contractorPhone" class="form-control" inputmode="numeric" placeholder="Digits only" />
     </div>
 
     <div class="form-group">
@@ -589,9 +589,24 @@ document.getElementById('bookingForm').addEventListener('submit', async function
   const { submitEndpoint, apiKey, USE_URLENCODED } = CONFIG;
   if (!submitEndpoint) { showError('Please set CONFIG.submitEndpoint to your n8n Webhook URL.'); return; }
 
-  // Basic HTML5 validation
-  if (!this.checkValidity()) {
-    showError('Please fill all required fields.');
+  // Explicit validation for required fields to avoid false negatives
+  const requiredFields = [
+    { id: 'contractorName', label: 'Contractor Name' },
+    { id: 'property', label: 'Property' },
+    { id: 'service', label: 'Service' },
+    { id: 'bookingDate', label: 'Preferred Date' },
+    { id: 'status', label: 'Status' }
+  ];
+  const missing = requiredFields.filter(f => {
+    const el = document.getElementById(f.id);
+    if (!el) return true;
+    if (el.tagName === 'SELECT') return !el.value;
+    if (el.type === 'date') return !el.value;
+    return !(el.value && String(el.value).trim());
+  });
+  if (missing.length) {
+    const labels = missing.map(m => m.label).join(', ');
+    showError('Please fill required: ' + labels);
     return;
   }
 
