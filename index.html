@@ -591,16 +591,19 @@ document.getElementById('bookingForm').addEventListener('submit', async function
     const bookingData = {};
     for (const [k, v] of formData.entries()) {
       if (k.toLowerCase() === 'status') {
-        bookingData.Status = v; // Ensure Status is capitalized
+        bookingData.Status = v || '';
+        bookingData.status = v || '';
       } else {
         bookingData[k] = v;
       }
     }
 
-    // Double-check status is set
-    if (!bookingData.Status) {
-      const statusSelect = document.getElementById('status');
-      bookingData.Status = statusSelect.value;
+    // Normalize and ensure Status is set from the visible select if missing
+    const statusSelect = document.getElementById('status');
+    const selectedStatus = statusSelect ? statusSelect.value : '';
+    if (!bookingData.Status && selectedStatus) {
+      bookingData.Status = selectedStatus;
+      bookingData.status = selectedStatus;
     }
 
     console.log('Submitting data:', bookingData); // Debug log
@@ -641,7 +644,29 @@ document.getElementById('bookingForm').addEventListener('submit', async function
       throw new Error(`HTTP ${response.status}: ${text || 'No response body'}`);
     }
 
-    showSuccess('🎉 Booking submitted successfully!');
+    // Also push to NocoDB so the table reflects the submission (non-blocking)
+    try {
+      const { nocodbEndpoint, nocodbToken } = CONFIG;
+      if (nocodbEndpoint && nocodbToken) {
+        const ncResp = await fetch(nocodbEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'xc-token': nocodbToken
+          },
+          body: JSON.stringify(bookingData)
+        });
+        if (!ncResp.ok) {
+          const t = await ncResp.text().catch(()=>'');
+          console.warn('NocoDB post failed:', ncResp.status, t);
+        }
+      }
+    } catch (e) {
+      console.warn('Error posting to NocoDB:', e);
+    }
+
+    showSuccess(`🎉 Booking submitted successfully! Status: ${bookingData.Status || 'N/A'}`);
     this.reset();
   } catch (error) {
     console.error('Error submitting form:', error);
