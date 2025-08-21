@@ -53,6 +53,9 @@
     }
     .success-message { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
     .error-message { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    .phone-row { display: flex; gap: 10px; }
+    .phone-row .form-control { flex: 1; }
+    #countryCode { max-width: 140px; }
     @media (max-width: 768px) {
       .form-container { padding: 28px 18px; }
       .form-header h1 { font-size: 1.8em; }
@@ -80,7 +83,18 @@
     </div>
     <div class="form-group">
       <label for="contractorPhone">Contractor Phone</label>
-      <input type="tel" id="contractorPhone" name="contractorPhone" class="form-control" />
+      <div class="phone-row">
+        <select id="countryCode" name="countryCode" class="form-control">
+          <option value="">Code</option>
+          <option value="1">+1 (US/CA)</option>
+          <option value="44">+44 (UK)</option>
+          <option value="61">+61 (AU)</option>
+          <option value="65">+65 (SG)</option>
+          <option value="60">+60 (MY)</option>
+          <option value="91">+91 (IN)</option>
+        </select>
+        <input type="tel" id="contractorPhone" name="contractorPhone" class="form-control" inputmode="numeric" pattern="\\d{7,15}" placeholder="Digits only" />
+      </div>
     </div>
 
     <div class="form-group">
@@ -202,6 +216,18 @@ document.addEventListener('DOMContentLoaded', function () {
       applyScheduleSelection(this.value);
     });
   }
+  // Enforce numeric-only input for phone and country code
+  const phoneEl = document.getElementById('contractorPhone');
+  const ccEl = document.getElementById('countryCode');
+  const digitsOnly = (el, maxLen) => {
+    if (!el) return;
+    el.addEventListener('input', () => {
+      const digits = (el.value || '').replace(/\D+/g, '');
+      el.value = maxLen ? digits.slice(0, maxLen) : digits;
+    });
+  };
+  digitsOnly(phoneEl, 15);
+  digitsOnly(ccEl, 4);
   loadFromNocoDB();
 });
 
@@ -603,6 +629,11 @@ document.getElementById('bookingForm').addEventListener('submit', async function
       }
     }
 
+    // Compose full international phone number if country code provided
+    if (bookingData.countryCode && bookingData.contractorPhone) {
+      bookingData.contractorPhone = `+${String(bookingData.countryCode).replace(/\D+/g,'')}${String(bookingData.contractorPhone).replace(/\D+/g,'')}`;
+    }
+
     // Normalize and ensure Status is set from the visible select if missing
     const statusSelect = document.getElementById('status');
     const selectedStatus = statusSelect ? statusSelect.value : '';
@@ -699,7 +730,7 @@ document.getElementById('bookingForm').addEventListener('submit', async function
       idsToClear.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
 
       // Reset selects to placeholder option
-      const selects = ['scheduleId','property','service','status','timeSlot'];
+      const selects = ['scheduleId','property','service','status','timeSlot','countryCode'];
       selects.forEach(id => { const el = document.getElementById(id); if (el && el.options && el.options.length) el.selectedIndex = 0; });
 
       // Ensure date input is blank
@@ -709,6 +740,9 @@ document.getElementById('bookingForm').addEventListener('submit', async function
       // Clear schedule ID display
       const lawnScheduleIdDisplayEl = document.getElementById('lawnScheduleIdDisplay');
       if (lawnScheduleIdDisplayEl) lawnScheduleIdDisplayEl.value = '';
+      // Clear phone input
+      const phoneEl = document.getElementById('contractorPhone');
+      if (phoneEl) phoneEl.value = '';
     } catch {}
   } catch (error) {
     console.error('Error submitting form:', error);
