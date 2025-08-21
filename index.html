@@ -135,10 +135,10 @@
 
     <div class="form-group">
       <label for="status">Status *</label>
-      <select id="status" name="status" class="form-control" required>
+      <select id="status" name="Status" class="form-control" required>
         <option value="">Choose status...</option>
-        <option value="Pending">Schedule</option>
-        <option value="Confirmed">On process</option>
+        <option value="Scheduled">Scheduled</option>
+        <option value="On Process">On Process</option>
         <option value="Cancelled">Cancelled</option>
       </select>
     </div>
@@ -492,7 +492,6 @@ function applyScheduleSelection(scheduleId) {
   const serviceDateEl = document.getElementById('serviceDate');
   const serviceTypeEl = document.getElementById('serviceType');
   const assignedContractorEl = document.getElementById('assignedContractor');
-  const statusEl = document.getElementById('status');
   const scheduleSelect = document.getElementById('scheduleId');
   const selectedOpt = scheduleSelect ? scheduleSelect.options[scheduleSelect.selectedIndex] : null;
 
@@ -501,7 +500,6 @@ function applyScheduleSelection(scheduleId) {
     serviceDateEl.value = '';
     serviceTypeEl.value = '';
     assignedContractorEl.value = '';
-    statusEl.value = '';
     return;
   }
 
@@ -518,14 +516,12 @@ function applyScheduleSelection(scheduleId) {
 
   const serviceType = getField(row, ['Service Type','service type','Service_Type','service_type','Service','service','service_name','servicename']);
   const assigned = getField(row, ['Assigned Contractor','assigned contractor','Assigned_Contractor','assigned_contractor']);
-  const status = getField(row, ['Status','status']);
 
   propertyIdEl.value = propertyId != null ? String(propertyId) : '';
   document.getElementById('propertyDisplay').value = propertyDisplay || '';
   serviceDateEl.value = effectiveRawDate ? toDateInputValue(effectiveRawDate) : '';
   serviceTypeEl.value = serviceType != null ? String(serviceType) : '';
   assignedContractorEl.value = assigned != null ? String(assigned) : '';
-  statusEl.value = status != null ? String(status) : '';
 
   // Sync visible selects
   syncSelectValue(document.getElementById('property'), propertyDisplay || propertyId);
@@ -594,22 +590,18 @@ document.getElementById('bookingForm').addEventListener('submit', async function
     const formData = new FormData(this);
     const bookingData = {};
     for (const [k, v] of formData.entries()) {
-      // Ensure status is captured correctly
-      if (k === 'status') {
-        bookingData.Status = v; // Capitalize Status to match NocoDB column name
+      if (k.toLowerCase() === 'status') {
+        bookingData.Status = v; // Ensure Status is capitalized
       } else {
         bookingData[k] = v;
       }
     }
 
-    // Make sure status is set even if not in form
+    // Double-check status is set
     if (!bookingData.Status) {
       const statusSelect = document.getElementById('status');
       bookingData.Status = statusSelect.value;
     }
-
-    // Add timestamp
-    bookingData.submittedAt = new Date().toISOString();
 
     console.log('Submitting data:', bookingData); // Debug log
 
