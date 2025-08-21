@@ -216,9 +216,8 @@ document.addEventListener('DOMContentLoaded', function () {
       applyScheduleSelection(this.value);
     });
   }
-  // Enforce numeric-only input for phone and country code
+  // Enforce numeric-only input for phone
   const phoneEl = document.getElementById('contractorPhone');
-  const ccEl = document.getElementById('countryCode');
   const digitsOnly = (el, maxLen) => {
     if (!el) return;
     el.addEventListener('input', () => {
@@ -227,7 +226,6 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   };
   digitsOnly(phoneEl, 15);
-  digitsOnly(ccEl, 4);
   loadFromNocoDB();
 });
 
@@ -629,9 +627,9 @@ document.getElementById('bookingForm').addEventListener('submit', async function
       }
     }
 
-    // Compose full international phone number if country code provided
-    if (bookingData.countryCode && bookingData.contractorPhone) {
-      bookingData.contractorPhone = `+${String(bookingData.countryCode).replace(/\D+/g,'')}${String(bookingData.contractorPhone).replace(/\D+/g,'')}`;
+    // Ensure phone remains digits-only
+    if (bookingData.contractorPhone) {
+      bookingData.contractorPhone = String(bookingData.contractorPhone).replace(/\D+/g,'');
     }
 
     // Normalize and ensure Status is set from the visible select if missing
@@ -730,7 +728,7 @@ document.getElementById('bookingForm').addEventListener('submit', async function
       idsToClear.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
 
       // Reset selects to placeholder option
-      const selects = ['scheduleId','property','service','status','timeSlot','countryCode'];
+      const selects = ['scheduleId','property','service','status','timeSlot'];
       selects.forEach(id => { const el = document.getElementById(id); if (el && el.options && el.options.length) el.selectedIndex = 0; });
 
       // Ensure date input is blank
