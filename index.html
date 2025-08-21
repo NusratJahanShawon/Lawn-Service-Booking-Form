@@ -53,9 +53,7 @@
     }
     .success-message { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
     .error-message { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-    .phone-row { display: flex; gap: 10px; }
-    .phone-row .form-control { flex: 1; }
-    #countryCode { max-width: 140px; }
+    
     @media (max-width: 768px) {
       .form-container { padding: 28px 18px; }
       .form-header h1 { font-size: 1.8em; }
@@ -83,18 +81,7 @@
     </div>
     <div class="form-group">
       <label for="contractorPhone">Contractor Phone</label>
-      <div class="phone-row">
-        <select id="countryCode" name="countryCode" class="form-control">
-          <option value="">Code</option>
-          <option value="1">+1 (US/CA)</option>
-          <option value="44">+44 (UK)</option>
-          <option value="61">+61 (AU)</option>
-          <option value="65">+65 (SG)</option>
-          <option value="60">+60 (MY)</option>
-          <option value="91">+91 (IN)</option>
-        </select>
-        <input type="tel" id="contractorPhone" name="contractorPhone" class="form-control" inputmode="numeric" pattern="\\d{7,15}" placeholder="Digits only" />
-      </div>
+      <input type="tel" id="contractorPhone" name="contractorPhone" class="form-control" inputmode="numeric" pattern="\\d{7,15}" placeholder="Digits only" />
     </div>
 
     <div class="form-group">
