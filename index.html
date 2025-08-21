@@ -600,11 +600,12 @@ document.getElementById('bookingForm').addEventListener('submit', async function
       bookingData.status = selectedStatus;
     }
 
-    // Map selected schedule ID to the linked field "lawn schedule"
+    // Map selected schedule ID to the linked field "lawn schedule" and add "LAwn Schedule ID"
     const scheduleSelectEl = document.getElementById('scheduleId');
     const chosenScheduleId = scheduleSelectEl ? scheduleSelectEl.value : (bookingData.scheduleId || '');
     if (chosenScheduleId) {
-      bookingData['lawn schedule'] = chosenScheduleId;
+      bookingData['lawn schedule'] = [chosenScheduleId];
+      bookingData['Lawn Schedule ID'] = chosenScheduleId;
     }
 
     console.log('Submitting data:', bookingData); // Debug log
