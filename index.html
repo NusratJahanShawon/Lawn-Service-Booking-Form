@@ -415,7 +415,8 @@ async function loadFromNocoDB() {
     scheduleSelect.innerHTML = '<option value="">Choose a schedule...</option>';
 
     filteredRows.forEach(row => {
-      const scheduleId = getField(row, ['Schedule ID','Schedule_ID','schedule_id','ScheduleId','scheduleid','id']);
+      // Human-visible schedule identifier (NOT the internal row id)
+      const scheduleId = getField(row, ['Schedule ID','Schedule_ID','schedule_id','ScheduleId','scheduleid']);
       const internalRowId = row.Id != null ? row.Id : (row.id != null ? row.id : '');
       if (scheduleId == null) return;
 
@@ -620,10 +621,10 @@ document.getElementById('bookingForm').addEventListener('submit', async function
       bookingData['Lawn Schedule ID'] = chosenScheduleId;
       // Linked row should be NocoDB internal row id
       if (internalRowId) {
-        bookingData['lawn schedule'] = [internalRowId];
+        bookingData['lawn schedule'] = internalRowId;
       } else {
         // Fallback to provided value if internal id is not present
-        bookingData['lawn schedule'] = [chosenScheduleId];
+        bookingData['lawn schedule'] = chosenScheduleId;
       }
     }
 
