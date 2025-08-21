@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dynamic Booking Form</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .form-container {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 20px; padding: 40px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+      width: 100%; max-width: 600px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .form-header { text-align: center; margin-bottom: 30px; }
+    .form-header h1 { color: #333; margin-bottom: 10px; font-size: 2.2em; font-weight: 700; }
+    .form-header p { color: #666; font-size: 1.02em; }
+    .form-group { margin-bottom: 18px; }
+    .form-group label { display: block; margin-bottom: 8px; font-weight: 600; color: #333; font-size: 1.02em; }
+    .form-control {
+      width: 100%; padding: 14px 16px; border: 2px solid #e0e0e0; border-radius: 12px; font-size: 16px;
+      transition: all 0.2s ease; background: white;
+    }
+    .form-control:focus {
+      outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); transform: translateY(-1px);
+    }
+    .form-control:hover { border-color: #b0b0b0; }
+    select.form-control { cursor: pointer; }
+    .btn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;
+      padding: 16px 28px; border-radius: 12px; font-size: 17px; font-weight: 600; cursor: pointer;
+      transition: all 0.25s ease; width: 100%; margin-top: 8px;
+    }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 10px 25px rgba(102, 126, 234, 0.25); }
+    .btn:active { transform: translateY(0); }
+    .btn:disabled { background: #ccc; cursor: not-allowed; transform: none; box-shadow: none; }
+    .loading { display: none; text-align: center; color: #667eea; font-weight: 600; margin: 16px 0; }
+    .loading.show { display: block; }
+    .spinner {
+      display: inline-block; width: 20px; height: 20px; border: 3px solid #f3f3f3; border-top: 3px solid #667eea;
+      border-radius: 50%; animation: spin 1s linear infinite; margin-right: 10px;
+    }
+    @keyframes spin { 0%{transform:rotate(0deg);} 100%{transform:rotate(360deg);} }
+    .success-message, .error-message {
+      padding: 12px; border-radius: 10px; margin: 12px 0; font-weight: 600; display: none; font-size: 0.98em;
+    }
+    .success-message { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .error-message { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    @media (max-width: 768px) {
+      .form-container { padding: 28px 18px; }
+      .form-header h1 { font-size: 1.8em; }
+    }
+  </style>
+</head>
+<body>
+<div class="form-container">
+  <div class="form-header">
+    <h1>Lawn Service Booking Form</h1>
+    <p>Contractor: choose a schedule, review property/date, adjust if needed, and submit to confirm.</p>
+  </div>
+
+  <div class="loading" id="loadingIndicator">
+    <span class="spinner"></span> Loading form data...
+  </div>
+
+  <div class="success-message" id="successMessage"></div>
+  <div class="error-message" id="errorMessage"></div>
+
+  <form id="bookingForm" novalidate>
+    <div class="form-group">
+      <label for="contractorName">Contractor Name *</label>
+      <input type="text" id="contractorName" name="contractorName" class="form-control" required />
+    </div>
+    <div class="form-group">
+      <label for="contractorPhone">Contractor Phone</label>
+      <input type="tel" id="contractorPhone" name="contractorPhone" class="form-control" />
+    </div>
+
+    <div class="form-group">
+      <label for="scheduleId">Available Schedules</label>
+      <select id="scheduleId" name="scheduleId" class="form-control">
+        <option value="">Choose a schedule...</option>
+      </select>
+    </div>
+
+    <!-- Hidden but programmatically filled -->
+    <div class="form-group" style="display:none;">
+      <input type="hidden" id="propertyId" name="propertyId" />
+      <label for="propertyDisplay">Property</label>
+      <input type="text" id="propertyDisplay" class="form-control" readonly />
+    </div>
+
+    <div class="form-group" style="display:none;">
+      <label for="serviceDate">Schedule Service Date</label>
+      <input type="date" id="serviceDate" name="serviceDate" class="form-control" readonly />
+    </div>
+
+    <div class="form-group" style="display:none;">
+      <label for="serviceType">Service Type</label>
+      <input type="text" id="serviceType" name="serviceType" class="form-control" readonly />
+    </div>
+
+    <div class="form-group" style="display:none;">
+      <label for="assignedContractor">Assigned Contractor</label>
+      <input type="text" id="assignedContractor" name="assignedContractor" class="form-control" readonly />
+    </div>
+
+    <div class="form-group" style="display:none;">
+      <label for="status">Status (source)</label>
+      <input type="text" id="status" name="status" class="form-control" readonly />
+    </div>
+
+    <!-- Visible user selections -->
+    <div class="form-group">
+      <label for="property">Select Property *</label>
+      <select id="property" name="property" class="form-control" required>
+        <option value="">Choose a property...</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="service">Select Service *</label>
+      <select id="service" name="service" class="form-control" required>
+        <option value="">Choose a service...</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="bookingDate">Preferred Date *</label>
+      <input type="date" id="bookingDate" name="bookingDate" class="form-control" required />
+    </div>
+
+    <div class="form-group">
+      <label for="statusSelect">Status</label>
+      <select id="statusSelect" name="statusSelect" class="form-control">
+        <option value="">Choose status...</option>
+        <option value="Pending">Pending</option>
+        <option value="Confirmed">Confirmed</option>
+        <option value="Completed">Completed</option>
+        <option value="Cancelled">Cancelled</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="timeSlot">Preferred Time</label>
+      <select id="timeSlot" name="timeSlot" class="form-control">
+        <option value="">Choose a time slot...</option>
+        <option value="09:00">09:00 AM</option>
+        <option value="10:00">10:00 AM</option>
+        <option value="11:00">11:00 AM</option>
+        <option value="12:00">12:00 PM</option>
+        <option value="13:00">01:00 PM</option>
+        <option value="14:00">02:00 PM</option>
+        <option value="15:00">03:00 PM</option>
+        <option value="16:00">04:00 PM</option>
+        <option value="17:00">05:00 PM</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="notes">Additional Notes</label>
+      <textarea id="notes" name="notes" class="form-control" rows="4" placeholder="Any special requirements or notes..."></textarea>
+    </div>
+
+    <button type="submit" class="btn" id="submitBtn">📅 Submit Booking Request</button>
+  </form>
+</div>
+
+<script>
+/* ===================== Config ===================== */
+const CONFIG = {
+  // POINT THIS DIRECTLY TO YOUR n8n PUBLIC WEBHOOK URL (POST)
+  // Example: 'https://your-n8n.domain/webhook/abcd-efgh-1234'
+  submitEndpoint: 'https://your-n8n-domain.tld/webhook/REPLACE_WITH_YOUR_ID',
+  // If you really need to post to your Railway proxy, make sure that proxy adds CORS headers.
+  // submitEndpoint: 'https://primary-production-f6af0.up.railway.app/webhook/formsub',
+
+  // Your NocoDB REST API (list) endpoint
+  nocodbEndpoint: 'https://nocodb-production-0a33.up.railway.app/api/v2/tables/moose8vh2e5j4nt/records',
+  nocodbToken: 'N9Nm6rltNDVLcQQQFCo9PZZDv74_6hBIaBp53i6j',
+
+  // Keep this empty to avoid preflight. If you add a token, we will switch to JSON and trigger preflight.
+  apiKey: '',
+
+  // If true: send application/x-www-form-urlencoded (no preflight if no Authorization header)
+  // If false: send application/json (requires proper CORS on server)
+  USE_URLENCODED: true
+};
+
+/* ===================== Boot ===================== */
+document.addEventListener('DOMContentLoaded', function () {
+  const scheduleSelect = document.getElementById('scheduleId');
+  if (scheduleSelect) {
+    scheduleSelect.addEventListener('change', function () {
+      applyScheduleSelection(this.value);
+    });
+  }
+  loadFromNocoDB();
+});
+
+/* In-memory schedule map */
+let scheduleRowsById = new Map();
+
+/* ===================== Helpers ===================== */
+function isBlank(v) { return v == null || (typeof v === 'string' && v.trim() === ''); }
+
+function showLoading(show, message = 'Loading form data...') {
+  const loader = document.getElementById('loadingIndicator');
+  if (show) { loader.textContent = ' '; loader.innerHTML = '<span class="spinner"></span>' + message; loader.classList.add('show'); }
+  else { loader.classList.remove('show'); }
+}
+function showSuccess(message) {
+  const successDiv = document.getElementById('successMessage');
+  successDiv.textContent = message;
+  successDiv.style.display = 'block';
+  setTimeout(() => { successDiv.style.display = 'none'; }, 5000);
+}
+function showError(message) {
+  const errorDiv = document.getElementById('errorMessage');
+  errorDiv.textContent = message;
+  errorDiv.style.display = 'block';
+  setTimeout(() => { errorDiv.style.display = 'none'; }, 8000);
+}
+function clearMessages() {
+  document.getElementById('successMessage').style.display = 'none';
+  document.getElementById('errorMessage').style.display = 'none';
+}
+
+function getField(row, keys) {
+  for (const key of keys) if (Object.prototype.hasOwnProperty.call(row, key) && row[key] != null && row[key] !== '') return row[key];
+  const normMap = {};
+  for (const k in row) normMap[String(k).toLowerCase().replace(/\s|_/g, '')] = row[k];
+  for (const key of keys) {
+    const nk = String(key).toLowerCase().replace(/\s|_/g, '');
+    if (normMap[nk] != null && normMap[nk] !== '') return normMap[nk];
+  }
+  return null;
+}
+
+function resolvePropertyName(row) {
+  const ex = row._expand || row._EXPAND || null;
+  const keys = ['Property ID','Property_ID','property_id','property id','PropertyId'];
+  let linked = null;
+  if (ex) for (const k of keys) { if (ex[k]) { linked = ex[k]; break; } if (ex[String(k).replace(/\s/g,'_')]) { linked = ex[String(k).replace(/\s/g,'_')]; break; } }
+  if (!linked && row['Property ID'] && typeof row['Property ID'] === 'object') linked = row['Property ID'];
+  if (!linked && row.Property_ID && typeof row.Property_ID === 'object') linked = row.Property_ID;
+
+  const candidates = ['Property Name','Property_Name','name','Name','title','Title','displayValue','label'];
+  if (linked) {
+    const first = Array.isArray(linked) ? linked[0] : linked;
+    if (first && typeof first === 'object') {
+      for (const c of candidates) {
+        if (first[c]) return String(first[c]);
+        const nk = String(c).toLowerCase().replace(/\s|_/g,'');
+        for (const fk in first) if (String(fk).toLowerCase().replace(/\s|_/g,'') === nk) return String(first[fk]);
+      }
+    } else if (first != null) return String(first);
+  }
+  return null;
+}
+
+function resolvePropertyDisplay(row) {
+  const ex = row._expand || row._EXPAND || null;
+  const keys = ['Followup','followup','Follow Up','Follow_Up'];
+  let linked = null;
+  if (ex) for (const k of keys) { if (ex[k]) { linked = ex[k]; break; } }
+  if (!linked && row.Followup && typeof row.Followup === 'object') linked = row.Followup;
+  const candidates = ['Full Address','Property Address','Property Name','Address','FullAddress','PropertyAddress','Property_Name','name','Name','title','Title','displayValue','label'];
+  if (linked) {
+    const first = Array.isArray(linked) ? linked[0] : linked;
+    if (first && typeof first === 'object') {
+      for (const c of candidates) {
+        if (first[c] != null && first[c] !== '') return String(first[c]);
+        const nk = String(c).toLowerCase().replace(/\s|_/g,'');
+        for (const fk in first) if (String(fk).toLowerCase().replace(/\s|_/g,'') === nk && first[fk] != null && first[fk] !== '') return String(first[fk]);
+      }
+    } else if (first != null) return String(first);
+  }
+  return null;
+}
+
+function getDisplayString(value) {
+  if (value == null) return '';
+  if (['string','number','boolean'].includes(typeof value)) return String(value);
+  if (Array.isArray(value)) return getDisplayString(value[0]);
+  if (typeof value === 'object') {
+    const candidates = ['Address','Full Address','Property Address','Property Name','FullAddress','PropertyAddress','Property_Name','name','Name','title','Title','displayValue','label'];
+    for (const c of candidates) {
+      if (value[c] != null && value[c] !== '') return String(value[c]);
+      const nk = String(c).toLowerCase().replace(/\s|_/g,'');
+      for (const k in value) if (String(k).toLowerCase().replace(/\s|_/g,'') === nk && value[k] != null && value[k] !== '') return String(value[k]);
+    }
+  }
+  try { return JSON.stringify(value); } catch { return String(value); }
+}
+
+function parseFlexibleDate(input) {
+  if (!input) return null;
+  if (input instanceof Date) return isNaN(input.getTime()) ? null : input;
+  const raw = String(input).trim().replace('T',' ').split(' ')[0];
+
+  let m = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (m) {
+    let d = parseInt(m[1],10), mo = parseInt(m[2],10), y = parseInt(m[3],10);
+    if (y < 100) y += 2000;
+    if (d>=1 && d<=31 && mo>=1 && mo<=12) {
+      const dtDmy = new Date(Date.UTC(y, mo-1, d));
+      if (!isNaN(dtDmy.getTime())) return dtDmy;
+    }
+    const dtMdy = new Date(Date.UTC(y, d-1, mo));
+    if (!isNaN(dtMdy.getTime())) return dtMdy;
+  }
+
+  m = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) {
+    const y = parseInt(m[1],10), mo = parseInt(m[2],10), d = parseInt(m[3],10);
+    const dt = new Date(Date.UTC(y, mo-1, d));
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+
+  const dflt = new Date(raw);
+  return isNaN(dflt.getTime()) ? null : dflt;
+}
+function toDateInputValue(dateString) {
+  const d = parseFlexibleDate(dateString); if (!d) return '';
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth()+1).padStart(2,'0');
+  const dd = String(d.getUTCDate()).padStart(2,'0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+function formatDate(dateString) {
+  const date = parseFlexibleDate(dateString); if (!date) return String(dateString);
+  const dd = String(date.getUTCDate()).padStart(2,'0');
+  const mm = String(date.getUTCMonth()+1).padStart(2,'0');
+  const yyyy = date.getUTCFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+function syncSelectValue(selectEl, value) {
+  if (!selectEl || value == null) return;
+  const val = String(value); let found = false;
+  for (const opt of Array.from(selectEl.options)) {
+    if (String(opt.value) === val || String(opt.textContent).trim() === val) { selectEl.value = opt.value; found = true; break; }
+  }
+  if (!found && val) { const opt = document.createElement('option'); opt.value = val; opt.textContent = val; selectEl.appendChild(opt); selectEl.value = val; }
+}
+function syncDateSelect(selectEl, dateRaw) {
+  if (!selectEl || !dateRaw) return;
+  if (selectEl.tagName === 'SELECT') {
+    const display = formatDate(dateRaw); let found = false;
+    for (const opt of Array.from(selectEl.options)) {
+      if (opt.value === dateRaw || opt.textContent === display) { selectEl.value = opt.value; found = true; break; }
+    }
+    if (!found) { const opt = document.createElement('option'); opt.value = dateRaw; opt.textContent = display; selectEl.appendChild(opt); selectEl.value = dateRaw; }
+  } else if (selectEl.type === 'date') selectEl.value = toDateInputValue(dateRaw);
+}
+
+/* ===================== Data Load ===================== */
+async function loadFromNocoDB() {
+  const { nocodbEndpoint, nocodbToken } = CONFIG;
+  if (!nocodbEndpoint || !nocodbToken) { showError('Please configure the NocoDB endpoint and API token first.'); return; }
+
+  showLoading(true);
+  clearMessages();
+
+  try {
+    const withLimit = nocodbEndpoint.includes('limit=') ? nocodbEndpoint : (nocodbEndpoint + (nocodbEndpoint.includes('?') ? '&' : '?') + 'limit=100');
+
+    // Ensure both Property ID and Followup links are expanded
+    let urlObj; try { urlObj = new URL(withLimit); } catch { urlObj = null; }
+    let url;
+    if (urlObj) {
+      const existing = urlObj.searchParams.get('expand');
+      const needed = ['Property ID', 'Followup'];
+      const parts = new Set((existing ? existing.split(',') : []).map(s => s.trim()).filter(Boolean));
+      needed.forEach(n => parts.add(n));
+      urlObj.searchParams.set('expand', Array.from(parts).join(','));
+      url = urlObj.toString();
+    } else {
+      const sep = withLimit.includes('?') ? '&' : '?';
+      url = `${withLimit}${sep}expand=${encodeURIComponent('Property ID,Followup')}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'accept': 'application/json', 'xc-token': nocodbToken }
+    });
+
+    if (!response.ok) {
+      let bodyText = ''; try { bodyText = await response.text(); } catch {}
+      throw new Error(`NocoDB HTTP ${response.status} ${response.statusText}${bodyText ? ` - ${bodyText.substring(0, 300)}` : ''}`);
+    }
+
+    const data = await response.json();
+    const rows = Array.isArray(data) ? data : (data.list || []);
+
+    if (!rows.length) showError('NocoDB returned 0 records. Check table/view permissions or filters.');
+
+    /* === FILTER: only available schedules (no contractor AND no status) === */
+    const filteredRows = rows.filter(row => {
+      const assigned = getField(row, ['Assigned Contractor','assigned contractor','Assigned_Contractor','assigned_contractor']);
+      const status   = getField(row, ['Status','status']);
+      return isBlank(assigned) && isBlank(status);
+    });
+
+    // Build schedule select and in-memory map
+    scheduleRowsById = new Map();
+    const scheduleSelect = document.getElementById('scheduleId');
+    scheduleSelect.innerHTML = '<option value="">Choose a schedule...</option>';
+
+    filteredRows.forEach(row => {
+      const scheduleId = getField(row, ['Schedule ID','Schedule_ID','schedule_id','ScheduleId','scheduleid','id']);
+      if (scheduleId == null) return;
+
+      scheduleRowsById.set(String(scheduleId), row);
+
+      const propertyId = getField(row, ['Property ID','property ID','Property_ID','property_id','PropertyId','propertyid']);
+      const propertyDisplayRaw = resolvePropertyDisplay(row) || resolvePropertyName(row) || propertyId;
+      const propertyDisplay = getDisplayString(propertyDisplayRaw);
+
+      const serviceDateRaw = getField(row, [
+        'Schedule Service Date','Schedule Service Datem','Schedule_Service_Date','Service Date','service date','service_date',
+        'Work_Date','work date','upcoming_date','upcoming date','date','scheduled_date','scheduled date','booking_date','booking date'
+      ]);
+      const serviceType = getField(row, ['Service Type','service type','Service_Type','service_type','Service','service','service_name','servicename']);
+
+      const summaryParts = [
+        `ID: ${scheduleId}`,
+        propertyDisplay ? `Prop: ${propertyDisplay}` : null,
+        serviceDateRaw ? `Date: ${formatDate(serviceDateRaw)}` : null,
+        serviceType ? `Type: ${serviceType}` : null
+      ].filter(Boolean);
+      const summary = summaryParts.join(' | ');
+
+      const opt = document.createElement('option');
+      opt.value = String(scheduleId);
+      opt.textContent = summary;
+      opt.dataset.rawDate = serviceDateRaw ? String(serviceDateRaw) : '';
+      opt.dataset.propertyDisplay = propertyDisplay || '';
+      scheduleSelect.appendChild(opt);
+    });
+
+    // Auto-select first available schedule (if any)
+    if (scheduleSelect.options.length > 1) {
+      scheduleSelect.selectedIndex = 1;
+      applyScheduleSelection(scheduleSelect.value);
+    } else {
+      applyScheduleSelection('');
+    }
+
+    // Populate properties, services, and dates sets (from filtered rows)
+    const propertySet = new Set(); const serviceSet  = new Set(); const dateSet = new Set();
+
+    filteredRows.forEach(row => {
+      const propDisplayRaw = row.Property_Name || row.property_name || row.property || row.name ||
+        resolvePropertyDisplay(row) || resolvePropertyName(row) ||
+        getField(row, ['Property ID','property ID','Property_ID','property_id','PropertyId','propertyid']);
+      const propDisplay = getDisplayString(propDisplayRaw);
+      if (propDisplay) propertySet.add(propDisplay);
+
+      const serviceName = row.Service || row.service || row.service_name ||
+        getField(row, ['Service Type','service type','Service_Type','service_type','servicename']);
+      if (serviceName) serviceSet.add(serviceName);
+
+      const rawDate = row.Work_Date || row.upcoming_date || row.date || row.scheduled_date || row.booking_date ||
+        getField(row, ['Schedule Service Date','Schedule Service Datem','Schedule_Service_Date','Service Date','service date','service_date']);
+      if (rawDate) dateSet.add(rawDate);
+    });
+
+    populateFormData({
+      properties: Array.from(propertySet).map(name => ({ id: name, name })),
+      services:   Array.from(serviceSet).map(name => ({ id: name, name })),
+      availableDates: Array.from(dateSet)
+    });
+
+    showSuccess('Form data loaded from NocoDB successfully!');
+  } catch (error) {
+    console.error('Error loading from NocoDB:', error);
+    const msg = (error && error.message) ? error.message : String(error);
+    if (msg.includes('Failed to fetch')) showError('Failed to reach NocoDB (network/CORS). Serve this page over HTTPS and enable CORS on NocoDB.');
+    else showError('NocoDB error: ' + msg);
+  } finally {
+    showLoading(false);
+  }
+}
+
+/* ===================== Apply selection ===================== */
+function applyScheduleSelection(scheduleId) {
+  const row = scheduleRowsById.get(String(scheduleId));
+  const propertyIdEl = document.getElementById('propertyId');
+  const serviceDateEl = document.getElementById('serviceDate');
+  const serviceTypeEl = document.getElementById('serviceType');
+  const assignedContractorEl = document.getElementById('assignedContractor');
+  const statusEl = document.getElementById('status');
+  const scheduleSelect = document.getElementById('scheduleId');
+  const selectedOpt = scheduleSelect ? scheduleSelect.options[scheduleSelect.selectedIndex] : null;
+
+  if (!row) {
+    propertyIdEl.value = '';
+    serviceDateEl.value = '';
+    serviceTypeEl.value = '';
+    assignedContractorEl.value = '';
+    statusEl.value = '';
+    return;
+  }
+
+  const propertyId = getField(row, ['Property ID','property ID','Property_ID','property_id','PropertyId','propertyid']);
+  let propertyDisplayRaw = resolvePropertyDisplay(row) || resolvePropertyName(row);
+  if (propertyDisplayRaw == null && selectedOpt) propertyDisplayRaw = selectedOpt.dataset.propertyDisplay;
+  const propertyDisplay = getDisplayString(propertyDisplayRaw);
+
+  const serviceDateRaw = getField(row, [
+    'Schedule Service Date','Schedule Service Datem','Schedule_Service_Date','Service Date','service date','service_date',
+    'Work_Date','work date','upcoming_date','upcoming date','date','scheduled_date','scheduled date','booking_date','booking date'
+  ]);
+  const effectiveRawDate = serviceDateRaw || (selectedOpt && selectedOpt.dataset.rawDate) || '';
+
+  const serviceType = getField(row, ['Service Type','service type','Service_Type','service_type','Service','service','service_name','servicename']);
+  const assigned = getField(row, ['Assigned Contractor','assigned contractor','Assigned_Contractor','assigned_contractor']);
+  const status = getField(row, ['Status','status']);
+
+  propertyIdEl.value = propertyId != null ? String(propertyId) : '';
+  document.getElementById('propertyDisplay').value = propertyDisplay || '';
+  serviceDateEl.value = effectiveRawDate ? toDateInputValue(effectiveRawDate) : '';
+  serviceTypeEl.value = serviceType != null ? String(serviceType) : '';
+  assignedContractorEl.value = assigned != null ? String(assigned) : '';
+  statusEl.value = status != null ? String(status) : '';
+
+  // Sync visible selects
+  syncSelectValue(document.getElementById('property'), propertyDisplay || propertyId);
+  syncSelectValue(document.getElementById('service'), serviceType);
+  syncDateSelect(document.getElementById('bookingDate'), effectiveRawDate);
+}
+
+/* ===================== Populate visible form data ===================== */
+function populateFormData(data) {
+  const propertySelect = document.getElementById('property');
+  propertySelect.innerHTML = '<option value="">Choose a property...</option>';
+  if (data.properties) data.properties.forEach(property => {
+    const option = document.createElement('option');
+    option.value = property.id || property.name;
+    option.textContent = property.name;
+    propertySelect.appendChild(option);
+  });
+
+  const serviceSelect = document.getElementById('service');
+  serviceSelect.innerHTML = '<option value="">Choose a service...</option>';
+  if (data.services) data.services.forEach(service => {
+    const option = document.createElement('option');
+    option.value = service.id || service.name;
+    option.textContent = service.name;
+    serviceSelect.appendChild(option);
+  });
+
+  const dateEl = document.getElementById('bookingDate');
+  if (data.availableDates || data.dates) {
+    const dates = data.availableDates || data.dates;
+    if (dateEl && dateEl.tagName === 'SELECT') {
+      dateEl.innerHTML = '<option value="">Choose a date...</option>';
+      dates.forEach(date => {
+        const option = document.createElement('option');
+        option.value = date;
+        option.textContent = formatDate(date);
+        dateEl.appendChild(option);
+      });
+    } else if (dateEl && dateEl.type === 'date' && dates.length > 0) {
+      dateEl.value = toDateInputValue(dates[0]); // yyyy-mm-dd
+    }
+  }
+}
+
+/* ===================== Submit ===================== */
+document.getElementById('bookingForm').addEventListener('submit', async function (e) {
+  e.preventDefault();
+
+  const { submitEndpoint, apiKey, USE_URLENCODED } = CONFIG;
+  if (!submitEndpoint) { showError('Please set CONFIG.submitEndpoint to your n8n Webhook URL.'); return; }
+
+  // Basic HTML5 validation
+  if (!this.checkValidity()) {
+    showError('Please fill all required fields.');
+    return;
+  }
+
+  showLoading(true, 'Submitting booking...');
+  clearMessages();
+
+  const submitBtn = document.getElementById('submitBtn');
+  submitBtn.disabled = true;
+  submitBtn.textContent = '⏳ Submitting...';
+
+  try {
+    const formData = new FormData(this);
+    const bookingData = {};
+    for (const [k, v] of formData.entries()) bookingData[k] = v;
+
+    // add extra meta
+    bookingData.submittedAt = new Date().toISOString();
+
+    let fetchOptions;
+
+    // Use URL-encoded by default to avoid preflight.
+    if (USE_URLENCODED && !apiKey) {
+      const urlEncoded = new URLSearchParams();
+      for (const k in bookingData) urlEncoded.append(k, bookingData[k]);
+      fetchOptions = {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json,text/plain,*/*' },
+        body: urlEncoded.toString(),
+        redirect: 'follow'
+      };
+    } else {
+      // JSON mode (requires server CORS for preflight, esp. if Authorization is present)
+      const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json,text/plain,*/*' };
+      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+      fetchOptions = {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(bookingData),
+        redirect: 'follow'
+      };
+    }
+
+    const response = await fetch(submitEndpoint, fetchOptions);
+
+    // If CORS/preflight failed, the browser would block before this line.
+    // So reaching here means the request actually hit the server.
+    const respClone = response.clone();
+    let text = '';
+    try { text = await respClone.text(); } catch {}
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${text || 'No response body'}`);
+    }
+
+    showSuccess('🎉 Booking submitted successfully!');
+    this.reset();
+  } catch (error) {
+    console.error('Error submitting form:', error);
+    // Common hint for CORS
+    if (String(error).includes('TypeError: Failed to fetch')) {
+      showError('Submission failed: likely CORS or network issue. If using JSON/Authorization, enable CORS on server and allow OPTIONS.');
+    } else {
+      showError('Failed to submit booking: ' + (error && error.message ? error.message : String(error)));
+    }
+  } finally {
+    showLoading(false);
+    submitBtn.disabled = false;
+    submitBtn.textContent = '📅 Submit Booking Request';
+  }
+});
+</script>
+</body>
+</html>
