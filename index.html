@@ -192,7 +192,7 @@ const CONFIG = {
 
   // If true: send application/x-www-form-urlencoded (no preflight if no Authorization header)
   // If false: send application/json (requires proper CORS on server)
-  USE_URLENCODED: true
+  USE_URLENCODED: false
 };
 // Optional: direct lookup of Lawn Schedule table by human Schedule ID
 // Set to your Lawn Schedule table records endpoint to enable client-side ID resolution
@@ -738,27 +738,15 @@ document.getElementById('bookingForm').addEventListener('submit', async function
 
     let fetchOptions;
 
-    // Use URL-encoded by default to avoid preflight.
-    if (USE_URLENCODED && !apiKey) {
-      const urlEncoded = new URLSearchParams();
-      for (const k in bookingData) urlEncoded.append(k, bookingData[k]);
-      fetchOptions = {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json,text/plain,*/*' },
-        body: urlEncoded.toString(),
-        redirect: 'follow'
-      };
-    } else {
-      // JSON mode (requires server CORS for preflight, esp. if Authorization is present)
-      const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json,text/plain,*/*' };
-      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
-      fetchOptions = {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(bookingData),
-        redirect: 'follow'
-      };
-    }
+    // Use JSON mode for better compatibility with webhooks
+    const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json,text/plain,*/*' };
+    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+    fetchOptions = {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(bookingData),
+      redirect: 'follow'
+    };
 
     const response = await fetch(submitEndpoint, fetchOptions);
 
