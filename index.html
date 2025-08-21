@@ -441,13 +441,9 @@ async function loadFromNocoDB() {
       scheduleSelect.appendChild(opt);
     });
 
-    // Auto-select first available schedule (if any)
-    if (scheduleSelect.options.length > 1) {
-      scheduleSelect.selectedIndex = 1;
-      applyScheduleSelection(scheduleSelect.value);
-    } else {
-      applyScheduleSelection('');
-    }
+    // Keep form blank on load (no auto-selection)
+    scheduleSelect.selectedIndex = 0;
+    applyScheduleSelection('');
 
     // Populate properties, services, and dates sets (from filtered rows)
     const propertySet = new Set(); const serviceSet  = new Set(); const dateSet = new Set();
@@ -560,8 +556,6 @@ function populateFormData(data) {
         option.textContent = formatDate(date);
         dateEl.appendChild(option);
       });
-    } else if (dateEl && dateEl.type === 'date' && dates.length > 0) {
-      dateEl.value = toDateInputValue(dates[0]); // yyyy-mm-dd
     }
   }
 }
@@ -604,6 +598,13 @@ document.getElementById('bookingForm').addEventListener('submit', async function
     if (!bookingData.Status && selectedStatus) {
       bookingData.Status = selectedStatus;
       bookingData.status = selectedStatus;
+    }
+
+    // Map selected schedule ID to the linked field "lawn schedule"
+    const scheduleSelectEl = document.getElementById('scheduleId');
+    const chosenScheduleId = scheduleSelectEl ? scheduleSelectEl.value : (bookingData.scheduleId || '');
+    if (chosenScheduleId) {
+      bookingData['lawn schedule'] = chosenScheduleId;
     }
 
     console.log('Submitting data:', bookingData); // Debug log
@@ -667,7 +668,23 @@ document.getElementById('bookingForm').addEventListener('submit', async function
     }
 
     showSuccess(`🎉 Booking submitted successfully! Status: ${bookingData.Status || 'N/A'}`);
-    this.reset();
+
+    // Explicitly clear all fields after successful submission
+    try {
+      this.reset();
+
+      // Clear hidden/programmatic fields
+      const idsToClear = ['propertyId','propertyDisplay','serviceDate','serviceType','assignedContractor','statusSource'];
+      idsToClear.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+
+      // Reset selects to placeholder option
+      const selects = ['scheduleId','property','service','status','timeSlot'];
+      selects.forEach(id => { const el = document.getElementById(id); if (el && el.options && el.options.length) el.selectedIndex = 0; });
+
+      // Ensure date input is blank
+      const bookingDateEl = document.getElementById('bookingDate');
+      if (bookingDateEl && bookingDateEl.type === 'date') bookingDateEl.value = '';
+    } catch {}
   } catch (error) {
     console.error('Error submitting form:', error);
     // Common hint for CORS
