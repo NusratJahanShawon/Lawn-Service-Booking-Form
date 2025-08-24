@@ -53,7 +53,7 @@
     }
     .success-message { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
     .error-message { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-    
+
     @media (max-width: 768px) {
       .form-container { padding: 28px 18px; }
       .form-header h1 { font-size: 1.8em; }
@@ -115,8 +115,8 @@
       <input type="text" id="assignedContractor" name="assignedContractor" class="form-control" readonly />
     </div>
     <div class="form-group" style="display:none;">
-    <label for="statusSource">Status (source)</label>
-    <input type="text" id="statusSource" class="form-control" readonly />
+      <label for="statusSource">Status (source)</label>
+      <input type="text" id="statusSource" class="form-control" readonly />
     </div>
 
     <!-- Visible user selections -->
@@ -141,7 +141,7 @@
 
     <div class="form-group">
       <label for="status">Status *</label>
-      <select id="status" name="Status" class="form-control" required>
+      <select id="status" name="status" class="form-control" required>
         <option value="">Choose status...</option>
         <option value="Scheduled">Scheduled</option>
         <option value="On Process">On Process</option>
@@ -177,28 +177,56 @@
 <script>
 /* ===================== Config ===================== */
 const CONFIG = {
-  // POINT THIS DIRECTLY TO YOUR n8n PUBLIC WEBHOOK URL (POST)
-  // Example: 'https://your-n8n.domain/webhook/abcd-efgh-1234'
-  submitEndpoint: 'https://primary-production-f6af0.up.railway.app/webhook/formsub',
-  // If you really need to post to your Railway proxy, make sure that proxy adds CORS headers.
-  // submitEndpoint: 'https://primary-production-f6af0.up.railway.app/webhook/formsub',
+  // n8n webhook where the booking payload goes first
+  submitEndpoint: 'https://primary-production-f6af0.up.railway.app/webhook-test/formsub',
 
-  // Your NocoDB REST API (list) endpoint
-  nocodbEndpoint: 'https://nocodb-production-0a33.up.railway.app/api/v2/tables/moose8vh2e5j4nt/records',
+  // --- NocoDB: USE TWO ENDPOINTS ---
+  // 1) schedulesListEndpoint: the table/view you LIST schedules from (read)
+  schedulesListEndpoint: 'https://nocodb-production-0a33.up.railway.app/api/v2/tables/moose8vh2e5j4nt/records',
+
+  // 2) bookingsCreateEndpoint: the table you CREATE new bookings in (write)
+  // >>> CHANGE THIS to your BOOKINGS table records URL <<<
+  bookingsCreateEndpoint: 'https://nocodb-production-0a33.up.railway.app/api/v2/tables/mjc7wycwsr6fo60/records',
+
+  // API token that has read on schedules + create on bookings
   nocodbToken: 'N9Nm6rltNDVLcQQQFCo9PZZDv74_6hBIaBp53i6j',
 
-  // Keep this empty to avoid preflight. If you add a token, we will switch to JSON and trigger preflight.
-  apiKey: '',
+  // If you want to also create a REAL LINK from Booking -> Schedule (optional)
+  linkSchedule: {
+    enabled: true,              // set true if you have a Link column in Bookings
+    bookingsTableId: 'mjc7wycwsr6fo60',
+    linkFieldId: 'cud8yu712yq4ef2' // the Link-to-Another-Record field id in Bookings that points to Schedules
+  },
 
-  // If true: send application/x-www-form-urlencoded (no preflight if no Authorization header)
-  // If false: send application/json (requires proper CORS on server)
-  USE_URLENCODED: false
-};
-// Optional: direct lookup of Lawn Schedule table by human Schedule ID
-// Set to your Lawn Schedule table records endpoint to enable client-side ID resolution
-// Example: 'https://your-nocodb/api/v2/tables/<lawn_table_id>/records'
-CONFIG.lawnScheduleLookupEndpoint = CONFIG.lawnScheduleLookupEndpoint || '';
-
+     // Optional API key for your n8n webhook (Bearer); leave empty if not needed
+   apiKey: '',
+ };
+ 
+ // Function to help find exact field names in your NocoDB table
+ async function getNocoDBTableFields() {
+   try {
+     const response = await fetch(CONFIG.bookingsCreateEndpoint.replace('/records', ''), {
+       method: 'GET',
+       headers: {
+         'accept': 'application/json',
+         'xc-token': CONFIG.nocodbToken
+       }
+     });
+     
+     if (response.ok) {
+       const data = await response.json();
+       console.log('=== YOUR NOCODB TABLE FIELDS ===');
+       console.log('Available columns in your Bookings table:');
+       if (data.columns) {
+         data.columns.forEach(col => {
+           console.log(`- "${col.title}" (ID: ${col.id})`);
+         });
+       }
+     }
+   } catch (error) {
+     console.log('Could not fetch table structure:', error);
+   }
+ }
 
 /* ===================== Boot ===================== */
 document.addEventListener('DOMContentLoaded', function () {
@@ -217,8 +245,11 @@ document.addEventListener('DOMContentLoaded', function () {
       el.value = maxLen ? digits.slice(0, maxLen) : digits;
     });
   };
-  digitsOnly(phoneEl, 15);
-  loadFromNocoDB();
+     digitsOnly(phoneEl, 15);
+   loadSchedulesFromNocoDB();
+   
+   // Get the exact field names from your NocoDB table
+   getNocoDBTableFields();
 });
 
 /* In-memory schedule map */
@@ -422,15 +453,15 @@ function syncDateSelect(selectEl, dateRaw) {
 }
 
 /* ===================== Data Load ===================== */
-async function loadFromNocoDB() {
-  const { nocodbEndpoint, nocodbToken } = CONFIG;
-  if (!nocodbEndpoint || !nocodbToken) { showError('Please configure the NocoDB endpoint and API token first.'); return; }
+async function loadSchedulesFromNocoDB() {
+  const { schedulesListEndpoint, nocodbToken } = CONFIG;
+  if (!schedulesListEndpoint || !nocodbToken) { showError('Please configure schedulesListEndpoint and API token first.'); return; }
 
   showLoading(true);
   clearMessages();
 
   try {
-    const withLimit = nocodbEndpoint.includes('limit=') ? nocodbEndpoint : (nocodbEndpoint + (nocodbEndpoint.includes('?') ? '&' : '?') + 'limit=100');
+    const withLimit = schedulesListEndpoint.includes('limit=') ? schedulesListEndpoint : (schedulesListEndpoint + (schedulesListEndpoint.includes('?') ? '&' : '?') + 'limit=100');
 
     // Ensure Property ID, Followup, and Lawn Schedule links are expanded
     let urlObj; try { urlObj = new URL(withLimit); } catch { urlObj = null; }
@@ -475,19 +506,15 @@ async function loadFromNocoDB() {
     scheduleSelect.innerHTML = '<option value="">Choose a schedule...</option>';
 
     filteredRows.forEach(row => {
-      // Human-visible schedule identifier (NOT the internal row id)
-      const scheduleId = getField(row, ['Schedule ID','Schedule_ID','schedule_id','ScheduleId','scheduleid']);
-      // Prefer internal id from the expanded link if present (1–1 link)
-      let internalRowId = row.Id != null ? row.Id : (row.id != null ? row.id : '');
-      const ex = row._expand || row._EXPAND || {};
-      const ls = ex['Lawn Schedule'] || ex['Lawn_Schedule'] || ex['lawn schedule'] || ex['lawn_schedule'];
-      const lsFirst = Array.isArray(ls) ? ls[0] : ls;
-      if (lsFirst && (lsFirst.Id != null || lsFirst.id != null)) {
-        internalRowId = lsFirst.Id != null ? lsFirst.Id : lsFirst.id;
-      }
-      if (scheduleId == null) return;
+      // Use NocoDB's auto-generated primary key (Id) as the main identifier
+      const internalRowId = row.Id != null ? row.Id : (row.id != null ? row.id : '');
+      if (internalRowId == null || internalRowId === '') return;
 
-      scheduleRowsById.set(String(scheduleId), row);
+      // Human-visible schedule identifier for display purposes
+      const scheduleHumanId = getField(row, ['Schedule ID','Schedule_ID','schedule_id','ScheduleId','scheduleid']);
+
+      // Key in-memory map by NocoDB internal row ID
+      scheduleRowsById.set(String(internalRowId), row);
 
       const propertyId = getField(row, ['Property ID','property ID','Property_ID','property_id','PropertyId','propertyid']);
       const propertyDisplayRaw = resolvePropertyDisplay(row) || resolvePropertyName(row) || propertyId;
@@ -497,7 +524,7 @@ async function loadFromNocoDB() {
       const serviceType = getField(row, ['Service Type','service type','Service_Type','service_type','Service','service','service_name','servicename']);
 
       const summaryParts = [
-        `ID: ${scheduleId}`,
+        `ID: ${internalRowId}`,
         propertyDisplay ? `Prop: ${propertyDisplay}` : null,
         serviceDateRaw ? `Date: ${formatDate(serviceDateRaw)}` : `Date: N/A`,
         serviceType ? `Type: ${serviceType}` : null
@@ -505,11 +532,11 @@ async function loadFromNocoDB() {
       const summary = summaryParts.join(' | ');
 
       const opt = document.createElement('option');
-      opt.value = String(scheduleId);
+      opt.value = String(internalRowId); // Use internal row ID as the value we save
       opt.textContent = summary;
       opt.dataset.rawDate = serviceDateRaw ? String(serviceDateRaw) : '';
       opt.dataset.propertyDisplay = propertyDisplay || '';
-      opt.dataset.rowId = internalRowId !== undefined && internalRowId !== null ? String(internalRowId) : '';
+      opt.dataset.scheduleHumanId = scheduleHumanId || '';
       scheduleSelect.appendChild(opt);
     });
 
@@ -592,7 +619,11 @@ function applyScheduleSelection(scheduleId) {
   if (bookingDateEl && effectiveRawDate) bookingDateEl.value = toDateInputValue(effectiveRawDate);
   serviceTypeEl.value = serviceType != null ? String(serviceType) : '';
   assignedContractorEl.value = assigned != null ? String(assigned) : '';
-  if (lawnScheduleIdDisplayEl) lawnScheduleIdDisplayEl.value = String(scheduleId || '');
+  // Show the NocoDB internal row ID in the display field
+  if (lawnScheduleIdDisplayEl) {
+    const displayValue = selectedOpt ? String(selectedOpt.value || '') : String(scheduleId || '');
+    lawnScheduleIdDisplayEl.value = displayValue;
+  }
 
   // Sync visible selects
   syncSelectValue(document.getElementById('property'), propertyDisplay || propertyId);
@@ -639,8 +670,11 @@ function populateFormData(data) {
 document.getElementById('bookingForm').addEventListener('submit', async function (e) {
   e.preventDefault();
 
-  const { submitEndpoint, apiKey, USE_URLENCODED } = CONFIG;
-  if (!submitEndpoint) { showError('Please set CONFIG.submitEndpoint to your n8n Webhook URL.'); return; }
+  const { bookingsCreateEndpoint, nocodbToken, linkSchedule } = CONFIG;
+  if (!bookingsCreateEndpoint || bookingsCreateEndpoint.includes('REPLACE_WITH_BOOKINGS_TABLE_ID')) {
+    showError('Please set CONFIG.bookingsCreateEndpoint to your Bookings table records URL.');
+    return;
+  }
 
   // Explicit validation for required fields to avoid false negatives
   const requiredFields = [
@@ -670,16 +704,47 @@ document.getElementById('bookingForm').addEventListener('submit', async function
   submitBtn.disabled = true;
   submitBtn.textContent = '⏳ Submitting...';
 
-  try {
-    const formData = new FormData(this);
-    const bookingData = {};
-    for (const [k, v] of formData.entries()) {
-      if (k.toLowerCase() === 'status') {
-        bookingData.Status = v || '';
-        bookingData.status = v || '';
-      } else {
-        bookingData[k] = v;
-      }
+     try {
+     const formData = new FormData(this);
+     const bookingData = {};
+     
+     // Map selected schedule using NocoDB's internal row ID
+     const scheduleSelectEl = document.getElementById('scheduleId');
+     const chosenInternalId = scheduleSelectEl ? scheduleSelectEl.value : (formData.get('scheduleId') || '');
+     const chosenOpt = scheduleSelectEl && scheduleSelectEl.selectedIndex >= 0 ? scheduleSelectEl.options[scheduleSelectEl.selectedIndex] : null;
+     const humanScheduleId = chosenOpt ? (chosenOpt.dataset.scheduleHumanId || '') : '';
+     
+                                                                  // Map form fields to NocoDB field IDs - use exact field IDs from your table
+          const fieldMappings = {
+            // Use exact field IDs from your NocoDB table
+            'Property Address': formData.get('property') || '',
+            'Service Type': formData.get('service') || '',
+            'Booking Date': formData.get('bookingDate') || '',
+            'Status': formData.get('status') || '',
+            'Time Slot': formData.get('timeSlot') || '',
+            
+            // Use the exact field ID for Contractor Name
+            'cmxls1m9i6n2ahf': formData.get('contractorName') || '',
+            
+            // Use the exact field ID for Contractor Phone
+            'ctzohv7ow27pmpf': formData.get('contractorPhone') || '',
+            
+            // Use the exact field ID for Notes
+            'ca4bcpygr0tsvcs': formData.get('notes') || '',
+            
+            // Use the exact field ID for Schedule Service Date
+            'cdv3b2c1wlna8nz': document.getElementById('serviceDate')?.value || '',
+            
+            // Keep the Lawn Schedule ID as you already have it working
+            'Lawn Schedule ID': String(chosenInternalId) || ''
+          };
+     
+     // Copy mapped fields to bookingData
+     Object.assign(bookingData, fieldMappings);
+    
+    // Ensure status is properly set (both uppercase and lowercase)
+    if (bookingData.status) {
+      bookingData.Status = bookingData.status;
     }
 
     // Ensure phone remains digits-only
@@ -687,102 +752,118 @@ document.getElementById('bookingForm').addEventListener('submit', async function
       bookingData.contractorPhone = String(bookingData.contractorPhone).replace(/\D+/g,'');
     }
 
-    // Normalize and ensure Status is set from the visible select if missing
-    const statusSelect = document.getElementById('status');
-    const selectedStatus = statusSelect ? statusSelect.value : '';
-    if (!bookingData.Status && selectedStatus) {
-      bookingData.Status = selectedStatus;
-      bookingData.status = selectedStatus;
-    }
+         // Normalize and ensure Status is set from the visible select if missing
+     const statusSelect = document.getElementById('status');
+     const selectedStatus = statusSelect ? statusSelect.value : '';
+     if (!bookingData.Status && selectedStatus) {
+       bookingData.Status = selectedStatus;
+       bookingData.status = selectedStatus;
+     }
 
-    // Map selected schedule to link field and track display ID separately
-    const scheduleSelectEl = document.getElementById('scheduleId');
-    const chosenScheduleId = scheduleSelectEl ? scheduleSelectEl.value : (bookingData.scheduleId || '');
-    const chosenOpt = scheduleSelectEl && scheduleSelectEl.selectedIndex >= 0 ? scheduleSelectEl.options[scheduleSelectEl.selectedIndex] : null;
-    const internalRowId = chosenOpt ? (chosenOpt.dataset.rowId || '') : '';
-    if (chosenScheduleId) {
-      // Human-facing schedule identifier
-      bookingData['Lawn Schedule ID'] = chosenScheduleId;
-      // Linked row should be NocoDB internal row id; attempt to resolve if missing
-      if (internalRowId) {
-        bookingData['lawn schedule'] = internalRowId;
-      } else {
-        const lookupEndpoint = CONFIG.lawnScheduleLookupEndpoint || '';
-        if (lookupEndpoint) {
-          try {
-            const url = new URL(lookupEndpoint);
-            // Query by human Schedule ID using where param
-            const where = encodeURIComponent(JSON.stringify({ 'Schedule ID': { eq: chosenScheduleId } }));
-            url.searchParams.set('where', where);
-            url.searchParams.set('limit', '1');
-            const resp = await fetch(url.toString(), {
-              headers: { 'accept': 'application/json', 'xc-token': CONFIG.nocodbToken }
-            });
-            if (resp.ok) {
-              const out = await resp.json();
-              const list = Array.isArray(out) ? out : (out.list || []);
-              const first = list[0];
-              const id = first && (first.Id != null ? first.Id : first.id);
-              if (id) bookingData['lawn schedule'] = String(id);
-            }
-          } catch (e) {
-            console.warn('Lookup for Lawn Schedule row id failed', e);
-          }
-        }
-        // If still not resolved, fallback to chosenScheduleId (server-side can map if configured)
-        if (!bookingData['lawn schedule']) bookingData['lawn schedule'] = chosenScheduleId;
-      }
-    }
+     // Always send a PLAIN TEXT column to Bookings for auditing/reference
+     // Make sure your Bookings table has a TEXT column named exactly "Lawn Schedule ID"
+     if (chosenInternalId) {
+       bookingData['Lawn Schedule ID'] = String(chosenInternalId); // <-- writeable text column in BOOKINGS
+       // Optional convenience copies if you created these columns too:
+       bookingData['Schedule ID'] = humanScheduleId || String(chosenInternalId);
+     }
 
-    console.log('Submitting data:', bookingData); // Debug log
-
-    let fetchOptions;
-
-    // Use JSON mode for better compatibility with webhooks
-    const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json,text/plain,*/*' };
-    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
-    fetchOptions = {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(bookingData),
-      redirect: 'follow'
+    // Add hidden/programmatic fields to ensure complete data capture
+    const hiddenFields = {
+      'propertyId': document.getElementById('propertyId')?.value || '',
+      'propertyDisplay': document.getElementById('propertyDisplay')?.value || '',
+      'serviceDate': document.getElementById('serviceDate')?.value || '',
+      'serviceType': document.getElementById('serviceType')?.value || '',
+      'assignedContractor': document.getElementById('assignedContractor')?.value || '',
+      'statusSource': document.getElementById('statusSource')?.value || ''
     };
+    
+    // Merge hidden fields into bookingData
+    Object.assign(bookingData, hiddenFields);
 
-    const response = await fetch(submitEndpoint, fetchOptions);
+               console.log('Submitting to NocoDB:', bookingData);
+      console.log('All form fields being sent:', Object.keys(bookingData));
+      console.log('Form data entries:', Array.from(formData.entries()));
+      console.log('Field mappings being used:', fieldMappings);
+      
+      // Debug: Show what's actually being sent
+      console.log('=== DEBUG: Field Values ===');
+      console.log('Contractor Name:', bookingData['Contractor Name'] || bookingData['contractorName']);
+      console.log('Contractor Phone:', bookingData['Contractor Phone'] || bookingData['contractorPhone']);
+      console.log('Property:', bookingData['Property'] || bookingData['Property Address']);
+      console.log('Service:', bookingData['Service'] || bookingData['Service Type'] || bookingData['Work Type']);
+      console.log('Booking Date:', bookingData['Booking Date'] || bookingData['bookingDate']);
+      console.log('Status:', bookingData['Status'] || bookingData['status']);
+      console.log('Time Slot:', bookingData['Time Slot'] || bookingData['timeSlot']);
+             console.log('Notes:', bookingData['Notes'] || bookingData['Additional Notes']);
+       console.log('Lawn Schedule ID:', bookingData['Lawn Schedule ID']);
+               console.log('Service Date Value:', document.getElementById('serviceDate')?.value);
+        console.log('Schedule Service Date (Field ID cdv3b2c1wlna8nz):', bookingData['cdv3b2c1wlna8nz']);
+        console.log('Contractor Name Value:', formData.get('contractorName'));
+        console.log('Contractor Name (Field ID cmxls1m9i6n2ahf):', bookingData['cmxls1m9i6n2ahf']);
+        console.log('Contractor Phone Value:', formData.get('contractorPhone'));
+        console.log('Contractor Phone (Field ID ctzohv7ow27pmpf):', bookingData['ctzohv7ow27pmpf']);
+        console.log('Notes Value:', formData.get('notes'));
+        console.log('Notes (Field ID ca4bcpygr0tsvcs):', bookingData['ca4bcpygr0tsvcs']);
 
-    // If CORS/preflight failed, the browser would block before this line.
-    // So reaching here means the request actually hit the server.
-    const respClone = response.clone();
-    let text = '';
-    try { text = await respClone.text(); } catch {}
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${text || 'No response body'}`);
+    // Create row in NocoDB BOOKINGS table (authoritative store)
+    let createdBooking = null;
+    try {
+      const ncCreate = await fetch(bookingsCreateEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'xc-token': nocodbToken
+        },
+        body: JSON.stringify(bookingData)
+      });
+      const createdText = await ncCreate.clone().text().catch(()=> '');
+      console.log('NocoDB Response Status:', ncCreate.status);
+      console.log('NocoDB Response Text:', createdText);
+      
+             if (!ncCreate.ok) {
+         console.warn('NocoDB create failed:', ncCreate.status, createdText);
+         console.error('Full NocoDB error response:', createdText);
+         showError(`Failed to create booking in NocoDB: ${ncCreate.status} - ${createdText.substring(0, 200)}`);
+         return;
+       } else {
+        createdBooking = await ncCreate.json().catch(()=>null);
+        console.log('Successfully created booking:', createdBooking);
+        console.log('Created booking ID:', createdBooking?.Id);
+      }
+    } catch (e) {
+      console.warn('Error creating in NocoDB Bookings:', e);
     }
 
-    // Also push to NocoDB so the table reflects the submission (non-blocking)
-    try {
-      const { nocodbEndpoint, nocodbToken } = CONFIG;
-      if (nocodbEndpoint && nocodbToken) {
-        const ncResp = await fetch(nocodbEndpoint, {
+    // 3) OPTIONAL: if you actually have a Link column in Bookings -> Schedules, attach it via Links API
+    if (linkSchedule && linkSchedule.enabled && createdBooking && createdBooking.Id && chosenInternalId) {
+      try {
+        const linkUrl = `https://nocodb-production-0a33.up.railway.app/api/v2/tables/${encodeURIComponent(linkSchedule.bookingsTableId)}/links/${encodeURIComponent(linkSchedule.linkFieldId)}/records/${encodeURIComponent(createdBooking.Id)}`;
+        const linkResp = await fetch(linkUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
             'xc-token': nocodbToken
           },
-          body: JSON.stringify(bookingData)
+          body: JSON.stringify({ Id: Number(chosenInternalId) })
         });
-        if (!ncResp.ok) {
-          const t = await ncResp.text().catch(()=>'');
-          console.warn('NocoDB post failed:', ncResp.status, t);
-        }
+        const linkText = await linkResp.clone().text().catch(()=> '');
+        if (!linkResp.ok) console.warn('Linking failed:', linkResp.status, linkText);
+      } catch (e) {
+        console.warn('Error during link attach:', e);
       }
-    } catch (e) {
-      console.warn('Error posting to NocoDB:', e);
     }
 
-    showSuccess(`🎉 Booking submitted successfully! Status: ${bookingData.Status || 'N/A'}`);
+         showSuccess(`🎉 Booking created in NocoDB successfully! Status: ${bookingData.Status || 'N/A'}`);
+     
+     // Help user find the correct field names
+     console.log('=== TO FIND CORRECT FIELD NAMES ===');
+     console.log('1. Go to your NocoDB Bookings table');
+     console.log('2. Look at the column headers');
+     console.log('3. The exact field names should match what we\'re sending');
+     console.log('4. If fields are missing, check the NocoDB error response above');
 
     // Explicitly clear all fields after successful submission
     try {
@@ -800,16 +881,14 @@ document.getElementById('bookingForm').addEventListener('submit', async function
       const bookingDateEl = document.getElementById('bookingDate');
       if (bookingDateEl && bookingDateEl.type === 'date') bookingDateEl.value = '';
 
-      // Clear schedule ID display
+      // Clear schedule ID display & phone
       const lawnScheduleIdDisplayEl = document.getElementById('lawnScheduleIdDisplay');
       if (lawnScheduleIdDisplayEl) lawnScheduleIdDisplayEl.value = '';
-      // Clear phone input
       const phoneEl = document.getElementById('contractorPhone');
       if (phoneEl) phoneEl.value = '';
     } catch {}
   } catch (error) {
     console.error('Error submitting form:', error);
-    // Common hint for CORS
     if (String(error).includes('TypeError: Failed to fetch')) {
       showError('Submission failed: likely CORS or network issue. If using JSON/Authorization, enable CORS on server and allow OPTIONS.');
     } else {
