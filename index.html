@@ -293,10 +293,10 @@ function getField(row, keys) {
 
 function resolvePropertyName(row) {
   const ex = row._expand || row._EXPAND || null;
-  const keys = ['Property ID','Property_ID','property_id','property id','PropertyId'];
+  const keys = ['Property','Property_ID','property_id','property','PropertyId'];
   let linked = null;
   if (ex) for (const k of keys) { if (ex[k]) { linked = ex[k]; break; } if (ex[String(k).replace(/\s/g,'_')]) { linked = ex[String(k).replace(/\s/g,'_')]; break; } }
-  if (!linked && row['Property ID'] && typeof row['Property ID'] === 'object') linked = row['Property ID'];
+  if (!linked && row['Property'] && typeof row['Property'] === 'object') linked = row['Property'];
   if (!linked && row.Property_ID && typeof row.Property_ID === 'object') linked = row.Property_ID;
 
   const candidates = ['Property Name','Property_Name','name','Name','title','Title','displayValue','label'];
@@ -463,19 +463,19 @@ async function loadSchedulesFromNocoDB() {
   try {
     const withLimit = schedulesListEndpoint.includes('limit=') ? schedulesListEndpoint : (schedulesListEndpoint + (schedulesListEndpoint.includes('?') ? '&' : '?') + 'limit=100');
 
-    // Ensure Property ID, Followup, and Lawn Schedule links are expanded
+    // Ensure Property, Followup, and Lawn Schedule links are expanded
     let urlObj; try { urlObj = new URL(withLimit); } catch { urlObj = null; }
     let url;
     if (urlObj) {
       const existing = urlObj.searchParams.get('expand');
-      const needed = ['Property ID', 'Followup', 'Lawn Schedule'];
+      const needed = ['Property', 'Followup', 'Lawn Schedule'];
       const parts = new Set((existing ? existing.split(',') : []).map(s => s.trim()).filter(Boolean));
       needed.forEach(n => parts.add(n));
       urlObj.searchParams.set('expand', Array.from(parts).join(','));
       url = urlObj.toString();
     } else {
       const sep = withLimit.includes('?') ? '&' : '?';
-      url = `${withLimit}${sep}expand=${encodeURIComponent('Property ID,Followup,Lawn Schedule')}`;
+      url = `${withLimit}${sep}expand=${encodeURIComponent('Property,Followup,Lawn Schedule')}`;
     }
 
     const response = await fetch(url, {
@@ -516,7 +516,7 @@ async function loadSchedulesFromNocoDB() {
       // Key in-memory map by NocoDB internal row ID
       scheduleRowsById.set(String(internalRowId), row);
 
-      const propertyId = getField(row, ['Property ID','property ID','Property_ID','property_id','PropertyId','propertyid']);
+      const propertyId = getField(row, ['Property','property','Property_ID','property_id','PropertyId','propertyid']);
       const propertyDisplayRaw = resolvePropertyDisplay(row) || resolvePropertyName(row) || propertyId;
       const propertyDisplay = getDisplayString(propertyDisplayRaw);
 
@@ -550,7 +550,7 @@ async function loadSchedulesFromNocoDB() {
     filteredRows.forEach(row => {
       const propDisplayRaw = row.Property_Name || row.property_name || row.property || row.name ||
         resolvePropertyDisplay(row) || resolvePropertyName(row) ||
-        getField(row, ['Property ID','property ID','Property_ID','property_id','PropertyId','propertyid']);
+        getField(row, ['Property','property','Property_ID','property_id','PropertyId','propertyid']);
       const propDisplay = getDisplayString(propDisplayRaw);
       if (propDisplay) propertySet.add(propDisplay);
 
@@ -600,7 +600,7 @@ function applyScheduleSelection(scheduleId) {
     return;
   }
 
-  const propertyId = getField(row, ['Property ID','property ID','Property_ID','property_id','PropertyId','propertyid']);
+  const propertyId = getField(row, ['Property','property','Property_ID','property_id','PropertyId','propertyid']);
   let propertyDisplayRaw = resolvePropertyDisplay(row) || resolvePropertyName(row);
   if (propertyDisplayRaw == null && selectedOpt) propertyDisplayRaw = selectedOpt.dataset.propertyDisplay;
   const propertyDisplay = getDisplayString(propertyDisplayRaw);
