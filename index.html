@@ -600,7 +600,16 @@ function applyScheduleSelection(scheduleId) {
     return;
   }
 
-  const propertyId = getField(row, ['Property','property','Property_ID','property_id','PropertyId','propertyid']);
+  const propertyIdRaw = getField(row, ['Property','property','Property_ID','property_id','PropertyId','propertyid']);
+  
+  // Extract actual property ID from object if it's a linked record
+  let propertyId = '';
+  if (propertyIdRaw && typeof propertyIdRaw === 'object' && propertyIdRaw.Id) {
+    propertyId = String(propertyIdRaw.Id);
+  } else if (propertyIdRaw) {
+    propertyId = String(propertyIdRaw);
+  }
+  
   let propertyDisplayRaw = resolvePropertyDisplay(row) || resolvePropertyName(row);
   if (propertyDisplayRaw == null && selectedOpt) propertyDisplayRaw = selectedOpt.dataset.propertyDisplay;
   const propertyDisplay = getDisplayString(propertyDisplayRaw);
@@ -611,7 +620,7 @@ function applyScheduleSelection(scheduleId) {
   const serviceType = getField(row, ['Service Type','service type','Service_Type','service_type','Service','service','service_name','servicename']);
   const assigned = getField(row, ['Assigned Contractor','assigned contractor','Assigned_Contractor','assigned_contractor']);
 
-  propertyIdEl.value = propertyId != null ? String(propertyId) : '';
+  propertyIdEl.value = propertyId;
   document.getElementById('propertyDisplay').value = propertyDisplay || '';
   serviceDateEl.value = effectiveRawDate ? toDateInputValue(effectiveRawDate) : '';
   // Also reflect date into the visible bookingDate input
@@ -770,7 +779,6 @@ document.getElementById('bookingForm').addEventListener('submit', async function
 
     // Add hidden/programmatic fields to ensure complete data capture
     const hiddenFields = {
-      'propertyId': document.getElementById('propertyId')?.value || '',
       'propertyDisplay': document.getElementById('propertyDisplay')?.value || '',
       'serviceDate': document.getElementById('serviceDate')?.value || '',
       'serviceType': document.getElementById('serviceType')?.value || '',
@@ -870,7 +878,7 @@ document.getElementById('bookingForm').addEventListener('submit', async function
       this.reset();
 
       // Clear hidden/programmatic fields
-      const idsToClear = ['propertyId','propertyDisplay','serviceDate','serviceType','assignedContractor','statusSource'];
+      const idsToClear = ['propertyDisplay','serviceDate','serviceType','assignedContractor','statusSource'];
       idsToClear.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
 
       // Reset selects to placeholder option
