@@ -32,7 +32,15 @@
       outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); transform: translateY(-1px);
     }
     .form-control:hover { border-color: #b0b0b0; }
+    .form-control:disabled { 
+      background-color: #f5f5f5; 
+      color: #999; 
+      cursor: not-allowed; 
+      opacity: 0.6;
+    }
+    .form-control:disabled:hover { border-color: #e0e0e0; }
     select.form-control { cursor: pointer; }
+    select.form-control:disabled { cursor: not-allowed; }
     .btn {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;
       padding: 16px 28px; border-radius: 12px; font-size: 17px; font-weight: 600; cursor: pointer;
@@ -263,6 +271,41 @@ function showLoading(show, message = 'Loading form data...') {
   if (show) { loader.textContent = ' '; loader.innerHTML = '<span class="spinner"></span>' + message; loader.classList.add('show'); }
   else { loader.classList.remove('show'); }
 }
+
+function setFormFieldsDisabled(disabled) {
+  const formFields = [
+    'contractorName',
+    'contractorPhone', 
+    'scheduleId',
+    'property',
+    'service',
+    'bookingDate',
+    'status',
+    'timeSlot',
+    'notes'
+  ];
+  
+  formFields.forEach(fieldId => {
+    const field = document.getElementById(fieldId);
+    if (field) {
+      field.disabled = disabled;
+      // Add visual styling for disabled state
+      if (disabled) {
+        field.style.opacity = '0.6';
+        field.style.cursor = 'not-allowed';
+      } else {
+        field.style.opacity = '1';
+        field.style.cursor = field.tagName === 'SELECT' ? 'pointer' : 'text';
+      }
+    }
+  });
+  
+  // Also disable the submit button
+  const submitBtn = document.getElementById('submitBtn');
+  if (submitBtn) {
+    submitBtn.disabled = disabled;
+  }
+}
 function showSuccess(message) {
   const successDiv = document.getElementById('successMessage');
   successDiv.textContent = message;
@@ -459,6 +502,9 @@ async function loadSchedulesFromNocoDB() {
 
   showLoading(true);
   clearMessages();
+  
+  // Disable all form fields while loading
+  setFormFieldsDisabled(true);
 
   try {
     const withLimit = schedulesListEndpoint.includes('limit=') ? schedulesListEndpoint : (schedulesListEndpoint + (schedulesListEndpoint.includes('?') ? '&' : '?') + 'limit=100');
@@ -577,6 +623,8 @@ async function loadSchedulesFromNocoDB() {
     else showError('NocoDB error: ' + msg);
   } finally {
     showLoading(false);
+    // Re-enable all form fields after loading is complete (success or error)
+    setFormFieldsDisabled(false);
   }
 }
 
@@ -709,6 +757,9 @@ document.getElementById('bookingForm').addEventListener('submit', async function
   showLoading(true, 'Submitting booking...');
   clearMessages();
 
+  // Disable all form fields during submission
+  setFormFieldsDisabled(true);
+  
   const submitBtn = document.getElementById('submitBtn');
   submitBtn.disabled = true;
   submitBtn.textContent = '⏳ Submitting...';
@@ -904,6 +955,8 @@ document.getElementById('bookingForm').addEventListener('submit', async function
     }
   } finally {
     showLoading(false);
+    // Re-enable all form fields after submission is complete
+    setFormFieldsDisabled(false);
     submitBtn.disabled = false;
     submitBtn.textContent = '📅 Submit Booking Request';
   }
