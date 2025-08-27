@@ -77,11 +77,14 @@
   <form id="bookingForm" novalidate>
     <div class="form-group">
       <label for="contractorName">Contractor Name *</label>
-      <input type="text" id="contractorName" name="contractorName" class="form-control" required />
+      <select id="contractorName" name="contractorName" class="form-control" required>
+        <option value="">Choose a contractor...</option>
+      </select>
     </div>
+
     <div class="form-group">
-      <label for="contractorPhone">Contractor Phone</label>
-      <input type="tel" id="contractorPhone" name="contractorPhone" class="form-control" inputmode="numeric" placeholder="Digits only" />
+      <label for="companyName">Company Name</label>
+      <input type="text" id="companyName" name="companyName" class="form-control" readonly />
     </div>
 
     <div class="form-group">
@@ -91,10 +94,7 @@
       </select>
     </div>
 
-    <div class="form-group">
-      <label for="lawnScheduleIdDisplay">Lawn Schedule ID</label>
-      <input type="text" id="lawnScheduleIdDisplay" class="form-control" readonly />
-    </div>
+
 
     <!-- Hidden but programmatically filled -->
     <div class="form-group" style="display:none;">
@@ -188,6 +188,9 @@ const CONFIG = {
   // >>> CHANGE THIS to your BOOKINGS table records URL <<<
   bookingsCreateEndpoint: 'https://nocodb-production-0a33.up.railway.app/api/v2/tables/mjc7wycwsr6fo60/records',
 
+  // 3) contractorsListEndpoint: the table you LIST contractors from (read)
+  contractorsListEndpoint: 'https://nocodb-production-0a33.up.railway.app/api/v2/tables/mp91f5wrx1r8o2x/records',
+
   // API token that has read on schedules + create on bookings
   nocodbToken: 'N9Nm6rltNDVLcQQQFCo9PZZDv74_6hBIaBp53i6j',
 
@@ -236,17 +239,16 @@ document.addEventListener('DOMContentLoaded', function () {
       applyScheduleSelection(this.value);
     });
   }
-  // Enforce numeric-only input for phone
-  const phoneEl = document.getElementById('contractorPhone');
-  const digitsOnly = (el, maxLen) => {
-    if (!el) return;
-    el.addEventListener('input', () => {
-      const digits = (el.value || '').replace(/\D+/g, '');
-      el.value = maxLen ? digits.slice(0, maxLen) : digits;
+  
+  const contractorSelect = document.getElementById('contractorName');
+  if (contractorSelect) {
+    contractorSelect.addEventListener('change', function () {
+      applyContractorSelection(this.value);
     });
-  };
-     digitsOnly(phoneEl, 15);
+  }
+  
    loadSchedulesFromNocoDB();
+   loadContractorsFromNocoDB();
    
    // Get the exact field names from your NocoDB table
    getNocoDBTableFields();
@@ -254,6 +256,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
 /* In-memory schedule map */
 let scheduleRowsById = new Map();
+/* In-memory contractor map */
+let contractorRowsByName = new Map();
 
 /* ===================== Helpers ===================== */
 function isBlank(v) { return v == null || (typeof v === 'string' && v.trim() === ''); }
@@ -453,6 +457,59 @@ function syncDateSelect(selectEl, dateRaw) {
 }
 
 /* ===================== Data Load ===================== */
+async function loadContractorsFromNocoDB() {
+  const { contractorsListEndpoint, nocodbToken } = CONFIG;
+  if (!contractorsListEndpoint || !nocodbToken) { 
+    console.warn('Contractors endpoint or token not configured.'); 
+    return; 
+  }
+
+  try {
+    const withLimit = contractorsListEndpoint.includes('limit=') ? contractorsListEndpoint : (contractorsListEndpoint + (contractorsListEndpoint.includes('?') ? '&' : '?') + 'limit=100');
+
+    const response = await fetch(withLimit, {
+      method: 'GET',
+      headers: { 'accept': 'application/json', 'xc-token': nocodbToken }
+    });
+
+    if (!response.ok) {
+      let bodyText = ''; try { bodyText = await response.text(); } catch {}
+      throw new Error(`NocoDB HTTP ${response.status} ${response.statusText}${bodyText ? ` - ${bodyText.substring(0, 300)}` : ''}`);
+    }
+
+    const data = await response.json();
+    const rows = Array.isArray(data) ? data : (data.list || []);
+
+    if (!rows.length) {
+      console.warn('No contractors found in NocoDB table.');
+      return;
+    }
+
+    // Build contractor select
+    const contractorSelect = document.getElementById('contractorName');
+    contractorSelect.innerHTML = '<option value="">Choose a contractor...</option>';
+
+    rows.forEach(row => {
+      // Get contractor name using the field ID you provided
+      const contractorName = getField(row, ['ckmc09y2aw0gkvx', 'Contractor Name', 'contractor_name', 'name', 'Name', 'title', 'Title']);
+      
+      if (contractorName) {
+        const option = document.createElement('option');
+        option.value = String(contractorName);
+        option.textContent = String(contractorName);
+        contractorSelect.appendChild(option);
+        
+        // Store the contractor row data for later use
+        contractorRowsByName.set(String(contractorName), row);
+      }
+    });
+
+    console.log(`Loaded ${rows.length} contractors from NocoDB`);
+  } catch (error) {
+    console.error('Error loading contractors from NocoDB:', error);
+  }
+}
+
 async function loadSchedulesFromNocoDB() {
   const { schedulesListEndpoint, nocodbToken } = CONFIG;
   if (!schedulesListEndpoint || !nocodbToken) { showError('Please configure schedulesListEndpoint and API token first.'); return; }
@@ -581,6 +638,24 @@ async function loadSchedulesFromNocoDB() {
 }
 
 /* ===================== Apply selection ===================== */
+function applyContractorSelection(contractorName) {
+  const companyNameEl = document.getElementById('companyName');
+  
+  if (!contractorName) {
+    companyNameEl.value = '';
+    return;
+  }
+  
+  const contractorRow = contractorRowsByName.get(String(contractorName));
+  if (contractorRow) {
+    // Get company name using the field ID you provided
+    const companyName = getField(contractorRow, ['cmh9013o72ks4a4', 'Company Name', 'company_name', 'company', 'Company']);
+    companyNameEl.value = companyName ? String(companyName) : '';
+  } else {
+    companyNameEl.value = '';
+  }
+}
+
 function applyScheduleSelection(scheduleId) {
   const row = scheduleRowsById.get(String(scheduleId));
   const propertyIdEl = document.getElementById('propertyId');
@@ -589,14 +664,12 @@ function applyScheduleSelection(scheduleId) {
   const assignedContractorEl = document.getElementById('assignedContractor');
   const scheduleSelect = document.getElementById('scheduleId');
   const selectedOpt = scheduleSelect ? scheduleSelect.options[scheduleSelect.selectedIndex] : null;
-  const lawnScheduleIdDisplayEl = document.getElementById('lawnScheduleIdDisplay');
 
   if (!row) {
     propertyIdEl.value = '';
     serviceDateEl.value = '';
     serviceTypeEl.value = '';
     assignedContractorEl.value = '';
-    if (lawnScheduleIdDisplayEl) lawnScheduleIdDisplayEl.value = '';
     return;
   }
 
@@ -619,11 +692,6 @@ function applyScheduleSelection(scheduleId) {
   if (bookingDateEl && effectiveRawDate) bookingDateEl.value = toDateInputValue(effectiveRawDate);
   serviceTypeEl.value = serviceType != null ? String(serviceType) : '';
   assignedContractorEl.value = assigned != null ? String(assigned) : '';
-  // Show the NocoDB internal row ID in the display field
-  if (lawnScheduleIdDisplayEl) {
-    const displayValue = selectedOpt ? String(selectedOpt.value || '') : String(scheduleId || '');
-    lawnScheduleIdDisplayEl.value = displayValue;
-  }
 
   // Sync visible selects
   syncSelectValue(document.getElementById('property'), propertyDisplay || propertyId);
@@ -723,20 +791,16 @@ document.getElementById('bookingForm').addEventListener('submit', async function
             'Status': formData.get('status') || '',
             'Time Slot': formData.get('timeSlot') || '',
             
-            // Use the exact field ID for Contractor Name
-            'cmxls1m9i6n2ahf': formData.get('contractorName') || '',
+                                      // Use the exact field ID for Contractor Name
+              'cmxls1m9i6n2ahf': formData.get('contractorName') || '',
+             
+             
+             
+             // Use the exact field ID for Notes
+             'ca4bcpygr0tsvcs': formData.get('notes') || '',
             
-            // Use the exact field ID for Contractor Phone
-            'ctzohv7ow27pmpf': formData.get('contractorPhone') || '',
-            
-            // Use the exact field ID for Notes
-            'ca4bcpygr0tsvcs': formData.get('notes') || '',
-            
-            // Use the exact field ID for Schedule Service Date
-            'cdv3b2c1wlna8nz': document.getElementById('serviceDate')?.value || '',
-            
-            // Keep the Lawn Schedule ID as you already have it working
-            'Lawn Schedule ID': String(chosenInternalId) || ''
+                         // Use the exact field ID for Schedule Service Date
+             'cdv3b2c1wlna8nz': document.getElementById('serviceDate')?.value || ''
           };
      
      // Copy mapped fields to bookingData
@@ -747,10 +811,7 @@ document.getElementById('bookingForm').addEventListener('submit', async function
       bookingData.Status = bookingData.status;
     }
 
-    // Ensure phone remains digits-only
-    if (bookingData.contractorPhone) {
-      bookingData.contractorPhone = String(bookingData.contractorPhone).replace(/\D+/g,'');
-    }
+    
 
          // Normalize and ensure Status is set from the visible select if missing
      const statusSelect = document.getElementById('status');
@@ -786,23 +847,20 @@ document.getElementById('bookingForm').addEventListener('submit', async function
       console.log('Form data entries:', Array.from(formData.entries()));
       console.log('Field mappings being used:', fieldMappings);
       
-      // Debug: Show what's actually being sent
-      console.log('=== DEBUG: Field Values ===');
-      console.log('Contractor Name:', bookingData['Contractor Name'] || bookingData['contractorName']);
-      console.log('Contractor Phone:', bookingData['Contractor Phone'] || bookingData['contractorPhone']);
+             // Debug: Show what's actually being sent
+       console.log('=== DEBUG: Field Values ===');
+              console.log('Contractor Name:', bookingData['Contractor Name'] || bookingData['contractorName']);
+
       console.log('Property:', bookingData['Property'] || bookingData['Property Address']);
       console.log('Service:', bookingData['Service'] || bookingData['Service Type'] || bookingData['Work Type']);
       console.log('Booking Date:', bookingData['Booking Date'] || bookingData['bookingDate']);
       console.log('Status:', bookingData['Status'] || bookingData['status']);
-      console.log('Time Slot:', bookingData['Time Slot'] || bookingData['timeSlot']);
-             console.log('Notes:', bookingData['Notes'] || bookingData['Additional Notes']);
-       console.log('Lawn Schedule ID:', bookingData['Lawn Schedule ID']);
+             console.log('Time Slot:', bookingData['Time Slot'] || bookingData['timeSlot']);
+              console.log('Notes:', bookingData['Notes'] || bookingData['Additional Notes']);
                console.log('Service Date Value:', document.getElementById('serviceDate')?.value);
         console.log('Schedule Service Date (Field ID cdv3b2c1wlna8nz):', bookingData['cdv3b2c1wlna8nz']);
-        console.log('Contractor Name Value:', formData.get('contractorName'));
-        console.log('Contractor Name (Field ID cmxls1m9i6n2ahf):', bookingData['cmxls1m9i6n2ahf']);
-        console.log('Contractor Phone Value:', formData.get('contractorPhone'));
-        console.log('Contractor Phone (Field ID ctzohv7ow27pmpf):', bookingData['ctzohv7ow27pmpf']);
+                 console.log('Contractor Name Value:', formData.get('contractorName'));
+         console.log('Contractor Name (Field ID cmxls1m9i6n2ahf):', bookingData['cmxls1m9i6n2ahf']);
         console.log('Notes Value:', formData.get('notes'));
         console.log('Notes (Field ID ca4bcpygr0tsvcs):', bookingData['ca4bcpygr0tsvcs']);
 
@@ -836,25 +894,98 @@ document.getElementById('bookingForm').addEventListener('submit', async function
       console.warn('Error creating in NocoDB Bookings:', e);
     }
 
-    // 3) OPTIONAL: if you actually have a Link column in Bookings -> Schedules, attach it via Links API
-    if (linkSchedule && linkSchedule.enabled && createdBooking && createdBooking.Id && chosenInternalId) {
-      try {
-        const linkUrl = `https://nocodb-production-0a33.up.railway.app/api/v2/tables/${encodeURIComponent(linkSchedule.bookingsTableId)}/links/${encodeURIComponent(linkSchedule.linkFieldId)}/records/${encodeURIComponent(createdBooking.Id)}`;
-        const linkResp = await fetch(linkUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'xc-token': nocodbToken
-          },
-          body: JSON.stringify({ Id: Number(chosenInternalId) })
-        });
-        const linkText = await linkResp.clone().text().catch(()=> '');
-        if (!linkResp.ok) console.warn('Linking failed:', linkResp.status, linkText);
-      } catch (e) {
-        console.warn('Error during link attach:', e);
-      }
-    }
+         // 3) OPTIONAL: if you actually have a Link column in Bookings -> Schedules, attach it via Links API
+     if (linkSchedule && linkSchedule.enabled && createdBooking && createdBooking.Id && chosenInternalId) {
+       try {
+         const linkUrl = `https://nocodb-production-0a33.up.railway.app/api/v2/tables/${encodeURIComponent(linkSchedule.bookingsTableId)}/links/${encodeURIComponent(linkSchedule.linkFieldId)}/records/${encodeURIComponent(createdBooking.Id)}`;
+         const linkResp = await fetch(linkUrl, {
+           method: 'POST',
+           headers: {
+             'Content-Type': 'application/json',
+             'Accept': 'application/json',
+             'xc-token': nocodbToken
+           },
+           body: JSON.stringify({ Id: Number(chosenInternalId) })
+         });
+         const linkText = await linkResp.clone().text().catch(()=> '');
+         if (!linkResp.ok) console.warn('Linking failed:', linkResp.status, linkText);
+       } catch (e) {
+         console.warn('Error during link attach:', e);
+       }
+     }
+
+                 
+
+               // 5) Create link to Contractor Profile table (One-to-Many: Contractor -> Bookings)
+        if (createdBooking && createdBooking.Id && bookingData['cmxls1m9i6n2ahf']) {
+          try {
+            // First, find the contractor record ID from the contractor name
+            const contractorName = bookingData['cmxls1m9i6n2ahf'];
+            const contractorRow = contractorRowsByName.get(String(contractorName));
+            
+            if (contractorRow && contractorRow.Id) {
+                             // For one-to-many relationship, we need to link from the "many" side (bookings) to the "one" side (contractor)
+               // The link field should be in the bookings table pointing to the contractor table
+               const contractorLinkUrl = `https://nocodb-production-0a33.up.railway.app/api/v2/tables/mjc7wycwsr6fo60/links/cej6y2chkxo8xce/records/${encodeURIComponent(createdBooking.Id)}`;
+              
+              console.log('Creating contractor link with:', {
+                bookingId: createdBooking.Id,
+                contractorId: contractorRow.Id,
+                contractorName: contractorName,
+                linkUrl: contractorLinkUrl
+              });
+              
+              const linkResp = await fetch(contractorLinkUrl, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json',
+                  'xc-token': nocodbToken
+                },
+                body: JSON.stringify({ Id: Number(contractorRow.Id) })
+              });
+              
+              const linkText = await linkResp.clone().text().catch(()=> '');
+              console.log('Contractor link response:', linkResp.status, linkText);
+              
+              if (!linkResp.ok) {
+                console.warn('Contractor Profile linking failed:', linkResp.status, linkText);
+                // Try alternative approach - update the booking record directly with contractor ID
+                try {
+                  const updateUrl = `https://nocodb-production-0a33.up.railway.app/api/v2/tables/mjc7wycwsr6fo60/records/${encodeURIComponent(createdBooking.Id)}`;
+                                     const updateData = {
+                     'cej6y2chkxo8xce': Number(contractorRow.Id) // Direct field update
+                   };
+                  
+                  const updateResp = await fetch(updateUrl, {
+                    method: 'PATCH',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Accept': 'application/json',
+                      'xc-token': nocodbToken
+                    },
+                    body: JSON.stringify(updateData)
+                  });
+                  
+                  const updateText = await updateResp.clone().text().catch(()=> '');
+                  if (!updateResp.ok) {
+                    console.warn('Direct contractor field update failed:', updateResp.status, updateText);
+                  } else {
+                    console.log('Successfully updated booking with contractor ID directly');
+                  }
+                } catch (updateError) {
+                  console.warn('Error during direct contractor field update:', updateError);
+                }
+              } else {
+                console.log('Successfully linked booking to contractor profile via Links API');
+              }
+            } else {
+              console.warn('Could not find contractor record ID for linking');
+            }
+          } catch (e) {
+            console.warn('Error during contractor profile link:', e);
+          }
+        }
 
          showSuccess(`🎉 Booking created in NocoDB successfully! Status: ${bookingData.Status || 'N/A'}`);
      
@@ -869,23 +1000,17 @@ document.getElementById('bookingForm').addEventListener('submit', async function
     try {
       this.reset();
 
-      // Clear hidden/programmatic fields
-      const idsToClear = ['propertyId','propertyDisplay','serviceDate','serviceType','assignedContractor','statusSource'];
-      idsToClear.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+                    // Clear hidden/programmatic fields
+        const idsToClear = ['propertyId','propertyDisplay','serviceDate','serviceType','assignedContractor','statusSource'];
+       idsToClear.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
 
       // Reset selects to placeholder option
-      const selects = ['scheduleId','property','service','status','timeSlot'];
+      const selects = ['scheduleId','property','service','status','timeSlot','contractorName'];
       selects.forEach(id => { const el = document.getElementById(id); if (el && el.options && el.options.length) el.selectedIndex = 0; });
 
-      // Ensure date input is blank
-      const bookingDateEl = document.getElementById('bookingDate');
-      if (bookingDateEl && bookingDateEl.type === 'date') bookingDateEl.value = '';
-
-      // Clear schedule ID display & phone
-      const lawnScheduleIdDisplayEl = document.getElementById('lawnScheduleIdDisplay');
-      if (lawnScheduleIdDisplayEl) lawnScheduleIdDisplayEl.value = '';
-      const phoneEl = document.getElementById('contractorPhone');
-      if (phoneEl) phoneEl.value = '';
+             // Ensure date input is blank
+       const bookingDateEl = document.getElementById('bookingDate');
+       if (bookingDateEl && bookingDateEl.type === 'date') bookingDateEl.value = '';
     } catch {}
   } catch (error) {
     console.error('Error submitting form:', error);
